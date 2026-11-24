@@ -135,6 +135,14 @@ func TestAddPerson(t *testing.T) {
 	if _, ok := f.Get("p_0000000000000000"); ok {
 		t.Error("Get of an unknown id found somebody")
 	}
+	if byName, ok := f.ByName("alice"); !ok || byName.ID != p.ID {
+		t.Errorf("ByName = %+v, %v", byName, ok)
+	}
+	for _, name := range []string{"Alice", "alic", "", "alice "} {
+		if _, ok := f.ByName(name); ok {
+			t.Errorf("ByName(%q) found somebody: the name must be exact", name)
+		}
+	}
 
 	for _, name := range []string{"Bob", "carol.smith", "dave_2", "x", "0day", "a-b", strings.Repeat("n", 32), "_svc"} {
 		f.add(t, name)

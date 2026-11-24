@@ -205,7 +205,7 @@ One TCP connection to Cave's port is one attempt, whatever happens on it, with e
 | `handshakeFailed` | The connection ended before authentication started (a port scanner, a non-SSH client, no common algorithm, the time limit) |
 | `refused` | Cave closed it at once because of the limits of §9.2 |
 
-When several reasons occurred on one connection, the outcome is the first that applies of: `accepted`, `notProven`, then the reason of the last key offered, else `noKey`.
+When several reasons occurred on one connection, the outcome is the first that applies of: `accepted`, `notProven`, then the reason of the last key offered, else `noKey`. Authentication starts when the key exchange has ended: a client that leaves after it without a request is `noKey`. A key offered with a signature algorithm that Cave does not take (RSA with SHA-1) is not looked at and counts as no key. A client that sends lines that are not an identification line is waited for, as the protocol allows, and ended by the time limit of §9.2.
 
 ### 8.2 The list
 

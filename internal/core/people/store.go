@@ -412,6 +412,16 @@ func (s *Store) Get(id string) (Person, bool) {
 	return Person{}, false
 }
 
+// ByName returns the person with exactly this login name, and whether there is one.
+func (s *Store) ByName(name string) (Person, bool) {
+	st := s.current.Load()
+	i, ok := st.byName[name]
+	if !ok {
+		return Person{}, false
+	}
+	return st.people[i].clone(), true
+}
+
 // Add adds an enabled person without keys.
 func (s *Store) Add(ctx context.Context, name string) (Person, error) {
 	s.write.Lock()
