@@ -128,20 +128,20 @@ func TestFlagsOptions(t *testing.T) {
 		}
 	}
 	// The flags win over the CAVE_ variables.
-	flags := Flags{ConfigDir: "/flag/config", StateDir: "/flag/state", Port: 2022, NoStart: true, AllowRoot: true, LogLevel: slog.LevelWarn}
-	got, err := flags.Options("tcave", env(map[string]string{storage.EnvConfigDir: "/env/config", storage.EnvStateDir: "/env/state", "HOME": "/home/ada"}))
+	flags := Flags{ConfigDir: absolute("/flag/config"), StateDir: absolute("/flag/state"), Port: 2022, NoStart: true, AllowRoot: true, LogLevel: slog.LevelWarn}
+	got, err := flags.Options("tcave", env(map[string]string{storage.EnvConfigDir: absolute("/env/config"), storage.EnvStateDir: absolute("/env/state"), "HOME": "/home/ada"}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Program != "tcave" || got.Dirs.Config != "/flag/config" || got.Dirs.State != "/flag/state" || got.Port != 2022 || !got.NoStart || !got.AllowRoot || got.LogLevel != slog.LevelWarn {
+	if got.Program != "tcave" || got.Dirs.Config != absolute("/flag/config") || got.Dirs.State != absolute("/flag/state") || got.Port != 2022 || !got.NoStart || !got.AllowRoot || got.LogLevel != slog.LevelWarn {
 		t.Errorf("Options = %+v", got)
 	}
 	// Without flags, the variables decide.
-	got, err = Flags{}.Options("cave", env(map[string]string{storage.EnvConfigDir: "/env/config", storage.EnvStateDir: "/env/state", "HOME": "/home/ada"}))
+	got, err = Flags{}.Options("cave", env(map[string]string{storage.EnvConfigDir: absolute("/env/config"), storage.EnvStateDir: absolute("/env/state"), "HOME": "/home/ada"}))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got.Program != "cave" || got.Dirs.Config != "/env/config" || got.Dirs.State != "/env/state" || got.Port != 0 || got.NoStart || got.AllowRoot {
+	if got.Program != "cave" || got.Dirs.Config != absolute("/env/config") || got.Dirs.State != absolute("/env/state") || got.Port != 0 || got.NoStart || got.AllowRoot {
 		t.Errorf("Options = %+v", got)
 	}
 	// A folder that is not an absolute path is refused, by the rule of the folders.

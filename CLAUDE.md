@@ -13,6 +13,8 @@ Cave does the job of `sshd`, as an application that an ordinary user starts and 
 - Test the cgo-free path, as a release build: `CGO_ENABLED=0 go test ./...`
 - Test for Windows, under Wine: `scripts/test-windows.sh` (every package that has files for Windows), or `scripts/test-windows.sh ./internal/core/pty`
 - Test one package: `go test ./internal/core/people -run TestName -v`
+- Test the programs under Wine (builds `tcave.exe` and `cave.exe` and runs them): `scripts/heavy.sh --alone -- go test -count=1 -tags cave_wine ./cmd/...`
+- Build for Windows: `scripts/heavy.sh -- scripts/build-windows.sh [--out <dir>]` (`dist/windows-amd64` by default). Proof of `cave.exe`: `scripts/heavy.sh --alone -- scripts/wine-proof.sh <out.png> --config <fixture dir>`
 - Tests that need a real display/GPU: `scripts/headless-wayland.sh -- go test -race -tags 'cave_display debug_mode' ./...`
 - Update golden files: `go test ./... -run Golden -update-goldens`, then review every changed file (PNG for the desktop UI, text for the TUI)
 - All the checks of "Definition of done" in one command: `scripts/checks.sh`

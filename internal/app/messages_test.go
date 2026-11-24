@@ -110,7 +110,7 @@ func TestMessage(t *testing.T) {
 		{"a connection that is not there", a.Disconnect(ctx, "nobody"), "That connection has already ended."},
 		{"an unknown setting", a.Set(ctx, "no.such", 1), "There is no setting named no.such."},
 		{"a setting out of range", a.Set(ctx, "server.port", 70000), "The value is not acceptable for server.port: it must be between 1 and 65535."},
-		{"a port that is taken", listenErr, fmt.Sprintf("Cave cannot listen on 127.0.0.1:%[1]d: listen tcp 127.0.0.1:%[1]d: bind: address already in use. Choose another port in Settings.", heldPort)},
+		{"a port that is taken", listenErr, fmt.Sprintf("Cave cannot listen on 127.0.0.1:%[1]d: listen tcp 127.0.0.1:%[1]d: bind: %[2]s. Choose another port in Settings.", heldPort, addrInUseWords)},
 		{"a second Cave", alreadyRunning, "Cave is already running on these folders. Quit the other one first, or use other folders with --config-dir and --state-dir."},
 		{"root", root, "Cave does not run as root, because every person it lets in would get a root shell. Start it as your own user."},
 		{"a port flag out of range", flagsPort, "A port is a number from 1 to 65535, not 0."},

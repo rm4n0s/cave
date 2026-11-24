@@ -237,7 +237,7 @@ func TestOpenGivesARunningApplication(t *testing.T) {
 			t.Fatal(err)
 		}
 		out, err := session.Output("echo hello")
-		if err != nil || string(out) != "hello\n" {
+		if err != nil || strings.TrimSpace(string(out)) != "hello" { // cmd.exe ends its lines with \r\n
 			t.Errorf("a command gave %q, %v", out, err)
 		}
 		// A new host key: the helper follows it.
@@ -260,7 +260,7 @@ func TestOpenSavesTheSettingsOfTheTest(t *testing.T) {
 		t.Errorf("the server is %v, want it stopped by the setting", r.App.Server().State)
 	}
 	s := r.App.Settings()
-	if s.String("server.address") != "127.0.0.1" || s.Int("server.port") != r.Port || s.String("session.shell") != "/bin/sh" || s.Int("server.keepAliveSeconds") != 0 {
+	if s.String("server.address") != "127.0.0.1" || s.Int("server.port") != r.Port || s.String("session.shell") != shell || s.Int("server.keepAliveSeconds") != 0 {
 		t.Errorf("the settings of the test were not saved")
 	}
 }

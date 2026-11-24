@@ -55,11 +55,11 @@ func (b *syncBuffer) Write(p []byte) (int, error) {
 }
 
 // Open opens a real application for a test. Before it opens, it saves the settings every test
-// needs: the server listens only on 127.0.0.1, on a port the system gave out, sessions run
-// /bin/sh, and keepalive is off (one big move of the fake clock would otherwise ask a client
-// several times at once and close it). The settings of more are saved after them. The
-// application's folders, home and runtime folder are all under the test's temporary folder; it
-// is closed when the test ends.
+// needs: the server listens only on 127.0.0.1, on a port the system gave out, sessions run the
+// shell of the platform (shell_linux.go, shell_windows.go), and keepalive is off (one big move of
+// the fake clock would otherwise ask a client several times at once and close it). The settings
+// of more are saved after them. The application's folders, home and runtime folder are all under
+// the test's temporary folder; it is closed when the test ends.
 func Open(t testing.TB, more map[string]any) *Real {
 	t.Helper()
 	dirs := storagetest.Isolate(t)
@@ -70,7 +70,7 @@ func Open(t testing.TB, more map[string]any) *Real {
 	}
 	seed := map[string]any{
 		string(settings.ServerAddress): "127.0.0.1", string(settings.ServerPort): port,
-		string(settings.SessionShell): "/bin/sh", string(settings.ServerKeepAliveSeconds): 0,
+		string(settings.SessionShell): shell, string(settings.ServerKeepAliveSeconds): 0,
 	}
 	for _, values := range []map[string]any{seed, more} {
 		for key, value := range values {
@@ -89,7 +89,7 @@ func Open(t testing.TB, more map[string]any) *Real {
 		IsRoot:    func() bool { return false },
 		Addresses: func() ([]string, error) { return []string{"192.0.2.10", "2001:db8::10", "127.0.0.1"}, nil },
 		User:      session.User{Name: "tester", Home: home},
-		Environ:   []string{"PATH=/usr/bin:/bin", "HOME=" + home},
+		Environ:   environ(home),
 	})
 	if err != nil {
 		t.Fatalf("app.Open: %v", err)

@@ -43,3 +43,11 @@ ssh -A <person>@<pc> ssh-add -l
 ```
 
 Does it list the key of your agent (the one of the computer you typed it on, not the PC's)? Does `echo %SSH_AUTH_SOCK%` in `ssh -A <person>@<pc>` print `\\.\pipe\cave-agent-…`?
+
+## Step 7.5: the programs on a Windows PC
+
+Build the files with `scripts/heavy.sh -- scripts/build-windows.sh` and copy `dist/windows-amd64/cave.exe` and `tcave.exe` to a Windows 10 (1809 or newer) or Windows 11 PC. Then:
+
+- Does `cave.exe` open without a console window? Do the tray icon and a notification appear (add a person, then connect with `ssh` from another computer, with `Notify when someone connects` on in Settings)?
+- From another computer, does `ssh <person>@<pc>` give a shell (ConPTY)? Does `sftp <person>@<pc>` list the drives at `/` and work? Does `ssh -A <person>@<pc> ssh-add -l` list the key of your agent (step 7.4 has the same check)?
+- Does `tcave.exe` draw correctly in Windows Terminal and in the old console (`cmd.exe` window)? Do the keys and the colors work, and does `q` quit?

@@ -233,7 +233,7 @@ func TestOpenOnEmptyFolders(t *testing.T) {
 			t.Errorf("%v", err)
 			continue
 		}
-		if info.Mode() != want {
+		if modesMean && info.Mode() != want {
 			t.Errorf("%s has the mode %v, want %v", name, info.Mode(), want)
 		}
 	}
@@ -379,7 +379,7 @@ func TestAPortInUseLeavesTheApplicationOpen(t *testing.T) {
 		t.Fatalf("the server is %+v, want it stopped", srv)
 	}
 	meta := errtest.Route(t, srv.Err, "Server.Start.ListenFailed")
-	if meta["address"] != "127.0.0.1:"+strconv.Itoa(f.port) || !errors.Is(srv.Err, syscall.EADDRINUSE) {
+	if meta["address"] != "127.0.0.1:"+strconv.Itoa(f.port) || !errors.Is(srv.Err, errnoAddrInUse) {
 		t.Errorf("the error is %v with %v", srv.Err, meta)
 	}
 	if log := f.log.String(); !strings.Contains(log, `"msg":"the server did not start"`) || !strings.Contains(log, "ListenFailed") {
