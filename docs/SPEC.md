@@ -335,7 +335,16 @@ Version 3 of the protocol (draft-ietf-secsh-filexfer-02), as OpenSSH's `sftp-ser
 - `RENAME` fails when the target exists (version 3); `posix-rename` replaces it.
 - `READDIR` gives `ls -l` style long names.
 - Limits: a packet of at most 256 KiB (a longer one ends the session), a read of at most 255 KiB per request, at most 256 open handles per session (`SSH_FX_FAILURE` beyond).
-- Errors of the OS map to `SSH_FX_NO_SUCH_FILE`, `SSH_FX_PERMISSION_DENIED` or `SSH_FX_FAILURE` with the OS's message.
+- Errors of the OS map to `SSH_FX_NO_SUCH_FILE` (also for a path through something that is not a folder, and for links that go in circles), `SSH_FX_PERMISSION_DENIED`, `SSH_FX_OP_UNSUPPORTED` (what the system does not have) or `SSH_FX_FAILURE`, with the OS's own message for the error ("file exists"), never the path.
+- The session begins with `INIT`, answered with `VERSION` 3 and the extensions Cave has, whatever version the client names. A request before `INIT`, a second `INIT`, a packet without a type or a request without an id cannot be answered and ends the session, as a packet over the limit does: the error is logged and the session's exit status is 255. A session the client ends has the exit status 0.
+- A request whose fields are not all there gets `SSH_FX_BAD_MESSAGE`. Extended attributes are read and dropped.
+- A handle is never given twice in a session; a handle that is not open gets `SSH_FX_FAILURE`. The end of the session closes every file it left open.
+- `OPEN` never waits (a named pipe without a writer opens at once and cannot be read) and never takes a terminal as Cave's own. Without the read or the write flag it opens for reading. A new file gets the permissions asked, else `0666`, cut by Cave's umask. A handle opened for appending writes at the end whatever offset a write names.
+- A read that gets no bytes is answered with `SSH_FX_EOF` (also a read of 0 bytes).
+- `SETSTAT` and `FSETSTAT` change the size, the permissions, the times and the owner, in that order; every one is tried, and the status is that of the first that failed.
+- `REMOVE` removes files and links, not folders. `REALPATH` resolves links, `.` and `..`; the last part of the path need not exist; the empty path is the home folder.
+- Every request is a line of the log at the debug level, with its path made safe (§8.3).
+- `subsystem` is the channel's one start, like `shell` and `exec`; a PTY asked before it is not used. With `sftp.enabled` off the request is refused, and a channel refused this way may still start something else.
 - OpenSSH's `scp` uses SFTP (since 9.0) and so works without a helper; `scp -O` runs `scp` through `exec`, which works when `scp` is installed.
 
 ### 9.8 Forwarding

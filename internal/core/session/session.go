@@ -13,6 +13,7 @@ import (
 	"github.com/rm4n0s/cave/internal/core/sanitize"
 	"github.com/rm4n0s/cave/internal/core/server"
 	"github.com/rm4n0s/cave/internal/core/settings"
+	"github.com/rm4n0s/cave/internal/core/sftp"
 	"github.com/rm4n0s/errors"
 	"golang.org/x/crypto/ssh"
 )
@@ -43,7 +44,7 @@ const (
 
 // Options are what the session handler needs. Every field is required.
 type Options struct {
-	// Settings has session.shell and session.acceptEnv.
+	// Settings has session.shell, session.acceptEnv and sftp.enabled.
 	Settings *settings.Store
 	// Logger gets the starts and ends of sessions.
 	Logger *slog.Logger
@@ -58,11 +59,19 @@ type handler struct {
 	opts Options
 	// pipe makes a pipe; tests replace it to make it fail.
 	pipe func() (r, w *os.File, err error)
+	// sftp serves the sftp subsystem; nil where Cave has no file system for it yet.
+	sftp *sftp.Server
 }
 
 // Register makes the server serve session channels.
 func Register(srv *server.Server, opts Options) {
 	h := &handler{opts: opts, pipe: os.Pipe}
+	fileSystem, err := sftp.NewFileSystem(opts.User.Home)
+	if err != nil {
+		opts.Logger.Warn("the sftp subsystem is not available", "err", err)
+	} else {
+		h.sftp = sftp.New(sftp.Options{FS: fileSystem, Logger: opts.Logger})
+	}
 	srv.HandleChannel("session", h.serve)
 }
 
@@ -76,7 +85,15 @@ type session struct {
 	// pty is the session's pseudo terminal, and term its type; nil and "" without a pty-req.
 	pty  *pty.Pty
 	term string
-	// proc is the running process, or nil before one was started.
+	// ctx ends when the connection does.
+	ctx context.Context
+	// started says that the channel had its one start: a shell, a command or a subsystem,
+	// whether it could start or not.
+	started bool
+	// subsystem says that what was started is a subsystem, which runs inside Cave.
+	subsystem bool
+	// proc is the session's process; nil before the start, when the start failed, and for a
+	// subsystem.
 	proc *process
 	// done is closed when the process ended and its output and status were sent.
 	done chan struct{}
@@ -91,12 +108,12 @@ type process struct {
 
 // serve runs one session channel until the process it started has ended and reported, or the
 // client or the connection ended it.
-func (h *handler) serve(_ context.Context, conn *server.Conn, newChannel ssh.NewChannel) {
+func (h *handler) serve(ctx context.Context, conn *server.Conn, newChannel ssh.NewChannel) {
 	channel, requests, err := newChannel.Accept()
 	if err != nil {
 		return // the connection is gone
 	}
-	s := &session{h: h, conn: conn, channel: channel, env: map[string]string{}, done: make(chan struct{})}
+	s := &session{h: h, ctx: ctx, conn: conn, channel: channel, env: map[string]string{}, done: make(chan struct{})}
 	defer func() { _ = channel.Close() }() // a close that fails means the channel is closed already
 	defer func() {
 		// Closing the terminal is what tells a process that is still on it that the session is
@@ -112,6 +129,12 @@ func (h *handler) serve(_ context.Context, conn *server.Conn, newChannel ssh.New
 				// The channel ended before the process did: the client closed it, or the
 				// connection is gone.
 				s.hangUp()
+				if s.subsystem {
+					// A subsystem runs inside Cave: it ends when its channel is closed, and the
+					// session is over when it has let go of what it had open.
+					_ = channel.Close() // closed already when the connection is gone
+					<-s.done
+				}
 				return
 			}
 			s.request(request)
@@ -146,9 +169,13 @@ func (s *session) request(request *ssh.Request) {
 		if err := ssh.Unmarshal(request.Payload, &size); err == nil && s.pty != nil {
 			ok = s.pty.Resize(pty.Size{Cols: size.Cols, Rows: size.Rows, Width: size.Width, Height: size.Height}) == nil
 		}
+	case "subsystem":
+		var payload struct{ Name string }
+		if err := ssh.Unmarshal(request.Payload, &payload); err == nil {
+			ok = s.startSubsystem(payload.Name)
+		}
 	case "break":
 		ok = true
-		// TODO(step 3.1): the sftp subsystem.
 		// TODO(step 3.5): auth-agent-req@openssh.com.
 	}
 	if request.WantReply {
@@ -163,7 +190,7 @@ func (s *session) setEnv(payload []byte) bool {
 	if err := ssh.Unmarshal(payload, &v); err != nil {
 		return false
 	}
-	if s.proc != nil || !validEnvName(v.Name) || len(v.Name)+len(v.Value) > MaxEnvBytes {
+	if s.started || !validEnvName(v.Name) || len(v.Name)+len(v.Value) > MaxEnvBytes {
 		return false
 	}
 	if _, set := s.env[v.Name]; !set && len(s.env) >= MaxEnvVars {
@@ -187,7 +214,7 @@ func (s *session) requestPty(payload []byte) bool {
 	if err := ssh.Unmarshal(payload, &req); err != nil {
 		return false
 	}
-	if s.proc != nil || s.pty != nil || !validTerm(req.Term) {
+	if s.started || s.pty != nil || !validTerm(req.Term) {
 		return false
 	}
 	logger := s.h.opts.Logger.With("connection", s.conn.ID(), "person", s.conn.PersonName())
@@ -224,9 +251,10 @@ func validTerm(term string) bool {
 // that cannot start is told to the client on the error stream with status 255, as when sshd's
 // child cannot run the shell.
 func (s *session) start(command string, login bool) bool {
-	if s.proc != nil {
+	if s.started {
 		return false
 	}
+	s.started = true
 	snap := s.h.opts.Settings.Snapshot()
 	shell := PickShell(snap.String(settings.SessionShell), s.h.opts.User, s.h.opts.Environ)
 	in := EnvInput{
@@ -247,7 +275,6 @@ func (s *session) start(command string, login bool) bool {
 	proc, stdout, stderr, err := s.h.spawn(shell, command, login, env, s.channel, s.pty)
 	if err != nil {
 		logger.Error("session could not start", "err", err)
-		s.proc = &process{} // the channel had its one start
 		go func() {
 			_, _ = io.WriteString(s.channel.Stderr(), "cave: the session could not start: "+err.Error()+"\r\n")
 			s.finish(startFailedStatus, "")
@@ -299,6 +326,33 @@ func (s *session) start(command string, login bool) bool {
 	return true
 }
 
+// startSubsystem starts a subsystem; Cave has one, sftp (docs/SPEC.md §9.7), which it serves
+// itself on the channel. Like a shell or a command, it is the channel's one start. A terminal
+// asked before it is not used.
+func (s *session) startSubsystem(name string) bool {
+	if s.started || name != "sftp" || s.h.sftp == nil || !s.h.opts.Settings.Snapshot().Bool(settings.SFTPEnabled) {
+		return false
+	}
+	s.started, s.subsystem = true, true
+	logger := s.h.opts.Logger.With("connection", s.conn.ID(), "person", s.conn.PersonName(), "kind", string(server.ActivitySFTP))
+	logger.Info("session started")
+	remove := s.conn.AddActivity(server.ActivitySFTP, "")
+	go func() {
+		err := s.h.sftp.Serve(s.ctx, s.channel)
+		remove()
+		status := 0
+		if err != nil {
+			// The client broke the protocol, or the channel failed under it.
+			logger.Warn("session ended", "status", startFailedStatus, "err", err)
+			status = startFailedStatus
+		} else {
+			logger.Info("session ended", "status", status)
+		}
+		s.finish(status, "")
+	}()
+	return true
+}
+
 // finish tells the client how the process ended and lets serve return.
 func (s *session) finish(status int, signal string) {
 	// A request that cannot be sent means the channel is gone, which serve notices by itself.
@@ -319,7 +373,7 @@ func (s *session) finish(status int, signal string) {
 // SIGHUP to its group, once. Cave never kills it; a job that ignores the signal goes on, as
 // with sshd.
 func (s *session) hangUp() {
-	if s.proc == nil || s.proc.cmd == nil {
+	if s.proc == nil {
 		return
 	}
 	select {
