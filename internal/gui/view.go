@@ -24,6 +24,11 @@ type view struct {
 	attempts    app.AttemptsSnapshot
 	connections []server.Connection
 	settings    settings.Snapshot
+	// window acts on the window: show, hide, and the question before quitting.
+	window *windowControl
+	// hasTray is true when the app has a tray icon: it was not made without one, and the desktop
+	// has a tray.
+	hasTray bool
 	// now is the time the relative times are counted from; the root moves it on every tick.
 	now time.Time
 	// page is the index in app.Pages of the page that is shown.

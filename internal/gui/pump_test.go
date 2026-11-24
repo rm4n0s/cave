@@ -45,6 +45,8 @@ func pumpWith(t *testing.T, a App, size ui.Size, page string, run runner) *glutt
 // real application gives the application's fake clock.
 func pumpOptions(t *testing.T, a App, size ui.Size, opts Options, run runner) *gluttertest.Tester {
 	t.Helper()
+	// A tray with no desktop behind it reports an error; only the tests of the tray have one.
+	opts.NoDesktop = true
 	tester := testutil.NewTester(t, size)
 	tester.PumpWidget(newRoot(context.Background(), a, opts, run))
 	tester.PumpAndSettle()
@@ -93,7 +95,7 @@ func pumpGoroutines(t *testing.T, a App, size ui.Size, page string) *gluttertest
 	tester := testutil.NewTester(t, size)
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
-	tester.PumpWidget(newRoot(ctx, a, Options{Page: page, Version: "0.0.0-test"}, newRunner(ctx, tester.Binding.Post)))
+	tester.PumpWidget(newRoot(ctx, a, Options{Page: page, Version: "0.0.0-test", NoDesktop: true}, newRunner(ctx, tester.Binding.Post)))
 	tester.PumpAndSettle()
 	return tester
 }

@@ -39,6 +39,11 @@ type rootState struct {
 	clock    clock.Clock
 	timer    clock.Timer
 	post     func(func())
+	// ctx ends the commands that are running when the window closes.
+	ctx context.Context
+	// tray is what is known of the desktop's tray.
+	tray *trayStatus
+	opts Options
 }
 
 // tickEvery is how often the relative times are drawn again.
@@ -49,7 +54,11 @@ func (s *rootState) InitState() {
 	w := s.Widget()
 	binding := m.WidgetsBindingOf(s.Context())
 	ctx, endWork := context.WithCancel(w.ctx)
-	s.endWork = endWork
+	s.endWork, s.ctx, s.opts = endWork, ctx, w.opts
+	s.tray = w.opts.tray
+	if s.tray == nil {
+		s.tray = &trayStatus{}
+	}
 	run := w.run
 	if run == nil {
 		run = newRunner(ctx, binding.Post)
@@ -62,17 +71,26 @@ func (s *rootState) InitState() {
 	s.post = binding.Post
 	s.v = (&view{
 		ctx: ctx, app: w.a, run: run, now: s.clock.Now(), page: page,
+		window:     &windowControl{binding: binding},
+		hasTray:    !w.opts.NoDesktop && !s.tray.unavailable(),
 		selectPage: s.selectPage, showSettings: s.showSettings, opts: w.opts,
 	}).
 		with(app.TopicServer | app.TopicPeople | app.TopicAttempts | app.TopicConnections | app.TopicSettings)
 	s.timer = s.clock.AfterFunc(tickEvery, s.tick)
+	// The tray may turn out to be missing after the first frame.
+	s.tray.subscribe(func() { binding.Post(s.trayGone) })
 	// The application tells its changes on its own goroutines: the work is handed to the UI thread.
 	s.cancel = w.a.Subscribe(func(event app.Event) {
-		changed, ok := event.(app.Changed)
-		if !ok {
-			return
+		switch e := event.(type) {
+		case app.Changed:
+			binding.Post(func() { s.refresh(e.Topics) })
+		case app.Accepted, app.Rejected:
+			binding.Post(func() {
+				if !s.disposed {
+					s.notify(e)
+				}
+			})
 		}
-		binding.Post(func() { s.refresh(changed.Topics) })
 	})
 }
 
@@ -80,8 +98,21 @@ func (s *rootState) InitState() {
 func (s *rootState) Dispose() {
 	s.disposed = true
 	s.timer.Stop()
+	s.tray.subscribe(nil)
 	s.cancel()
 	s.endWork()
+}
+
+// trayGone takes the tray out of the app, because the desktop has none. It runs on the UI thread.
+func (s *rootState) trayGone() {
+	if s.disposed || !s.v.hasTray {
+		return
+	}
+	s.SetState(func() {
+		c := *s.v
+		c.hasTray = false
+		s.v = &c
+	})
 }
 
 // tick moves the time of the view on, so that "3 min ago" is drawn again, and arms the next tick.

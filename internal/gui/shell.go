@@ -48,7 +48,7 @@ func newShell() *shell { return &shell{StatelessWidget: m.NewStatelessWidgetBase
 // Build chooses the rail or the bar by the width the window has.
 func (s *shell) Build(bc m.BuildContext) m.Widget {
 	v := viewOf(bc)
-	return newQuitGuard(m.NewLayoutBuilder(func(_ m.BuildContext, c rendering.BoxConstraints) m.Widget {
+	return newTrayHost(newQuitGuard(m.NewLayoutBuilder(func(_ m.BuildContext, c rendering.BoxConstraints) m.Widget {
 		page := pageFor(v)
 		if c.MaxWidth >= wideFrom {
 			return m.NewScaffold(m.ScaffoldOpts{
@@ -69,7 +69,7 @@ func (s *shell) Build(bc m.BuildContext) m.Widget {
 				OnDestinationSelected: v.selectPage,
 			}),
 		})
-	}))
+	})))
 }
 
 // icon returns the icon of a page, with the number of connections on the Connections one when it
