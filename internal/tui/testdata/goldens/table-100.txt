@@ -1,0 +1,6 @@
+  Name                                       Keys Enabled Last seen                                 
+  alice                                         2 yes     3 min ago                                 
+> bob-with-a-very-long-name-that-does-not-f… 1204 no      never                                     
+  日本語の名前                                  1 yes     2 h ago                                   
+  carol                                         0 yes     5 d ago                                   
+

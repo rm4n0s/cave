@@ -1,0 +1,10 @@
+
+ ┌────────────────────────────────────────────────────────┐
+ │ 3 people are connected. Quit and disconnect them?      │
+ │ Everything they have open ends, including transfers    │
+ │ that are under way.                                    │
+ │                                                        │
+ │ y Quit   n Cancel                                      │
+ └────────────────────────────────────────────────────────┘
+
+

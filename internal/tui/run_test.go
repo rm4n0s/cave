@@ -92,7 +92,7 @@ func TestRunWritesOnlyToItsWriter(t *testing.T) {
 	in, inW := io.Pipe()
 	done := runAsync(runCtx, f, runOptions(in, &out, f))
 	waitOutput(t, &out, "Overview") // the first frame is drawn
-	if _, err := inW.Write([]byte("q")); err != nil {
+	if _, err := inW.Write([]byte("qy")); err != nil {
 		t.Fatal(err)
 	}
 	if err := waitDone(t, done); err != nil {
@@ -182,7 +182,7 @@ func TestRunSendsTheApplicationsEvents(t *testing.T) {
 	}
 	f.Emit(appevents.Changed{Topics: appevents.TopicConnections | appevents.TopicServer})
 	app.waitReads(t, before, "after a Changed")
-	if _, err := inW.Write([]byte("q")); err != nil {
+	if _, err := inW.Write([]byte("qy")); err != nil {
 		t.Fatal(err)
 	}
 	if err := waitDone(t, done); err != nil {
@@ -209,7 +209,7 @@ func TestRunTicksWithTheClock(t *testing.T) {
 		f.Clock.Advance(tickEvery)
 		time.Sleep(10 * time.Millisecond)
 	}
-	if _, err := inW.Write([]byte("q")); err != nil {
+	if _, err := inW.Write([]byte("qy")); err != nil {
 		t.Fatal(err)
 	}
 	if err := waitDone(t, done); err != nil {

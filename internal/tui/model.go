@@ -42,6 +42,12 @@ type doneMsg struct {
 	err error
 }
 
+// asking is a question that is open and what happens when the answer is yes.
+type asking struct {
+	q   question
+	yes tea.Cmd
+}
+
 // Model is the root model of the TUI.
 type Model struct {
 	ctx   context.Context
@@ -54,6 +60,8 @@ type Model struct {
 	width, height int
 	page          page
 	help          bool
+	// ask is the question that is open, nil when there is none. It gets every key.
+	ask *asking
 	// message is the text of the message line; messageErr says that it is an error.
 	message    string
 	messageErr bool
@@ -110,17 +118,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // key handles a key press.
 func (m Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	name := msg.String()
-	if name == "ctrl+c" {
-		return m, tea.Quit
+	if m.ask != nil {
+		return m.keyAsked(msg)
 	}
 	m.message, m.messageErr = "", false
+	if name == "ctrl+c" {
+		m.help = false
+		return m.quit()
+	}
 	if m.help {
 		m.help = false // any key closes the help
 		return m, nil
 	}
 	switch name {
 	case "q":
-		return m, tea.Quit
+		return m.quit()
 	case "?":
 		m.help = true
 	case "1", "2", "3", "4", "5":
@@ -143,4 +155,32 @@ func (m Model) toggleServer() tea.Cmd {
 		return func() tea.Msg { return doneMsg{err: a.StopServer(ctx)} }
 	}
 	return func() tea.Msg { return doneMsg{err: a.StartServer(ctx)} }
+}
+
+// keyAsked handles a key while a question is open: it is the question's, except that ctrl+c quits
+// at once, so that a second ctrl+c always ends the program.
+func (m Model) keyAsked(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if msg.String() == "ctrl+c" {
+		return m, tea.Quit
+	}
+	decided, yes := m.ask.q.key(msg)
+	if !decided {
+		return m, nil
+	}
+	cmd := m.ask.yes
+	m.ask = nil
+	if !yes {
+		return m, nil
+	}
+	return m, cmd
+}
+
+// quit quits at once when nobody is connected, and otherwise asks, because quitting
+// disconnects them.
+func (m Model) quit() (tea.Model, tea.Cmd) {
+	if text := app.QuitQuestion(m.connections); text != "" {
+		m.ask = &asking{q: question{text: text, yes: "Quit"}, yes: tea.Quit}
+		return m, nil
+	}
+	return m, tea.Quit
 }

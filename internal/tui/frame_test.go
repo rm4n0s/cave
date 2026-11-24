@@ -176,8 +176,11 @@ func TestEveryLineFits(t *testing.T) {
 					for _, help := range []bool{false, true} {
 						h := newFakeHarness(t, make(), width, height)
 						h.key(string(rune('1' + p)))
-						if help {
+						switch {
+						case help:
 							h.key("?")
+						case p == pageConnections:
+							h.key("q") // the sample has a connection: the question is drawn
 						}
 						lines := strings.Split(h.screen(), "\n")
 						if len(lines) != height {
@@ -222,18 +225,19 @@ func TestChangedReadsTheSnapshotsAgain(t *testing.T) {
 }
 
 func TestQuitKeys(t *testing.T) {
-	for _, name := range []string{"q", "ctrl+c"} {
-		h := newFakeHarness(t, apptest.Sample(t), 100, 30)
-		h.key(name)
+	// With nobody connected, the quit keys quit at once, from the help too.
+	for _, keys := range [][]string{{"q"}, {"ctrl+c"}, {"?", "ctrl+c"}} {
+		h := newFakeHarness(t, apptest.Empty(t), 100, 30)
+		h.keys(keys...)
 		if !h.quit {
-			t.Errorf("%s did not quit", name)
+			t.Errorf("%v did not quit", keys)
 		}
 	}
-	// Ctrl+C quits from the help too.
-	h := newFakeHarness(t, apptest.Sample(t), 100, 30)
-	h.keys("?", "ctrl+c")
-	if !h.quit {
-		t.Error("ctrl+c did not quit from the help")
+	// The help closes with any key, q included.
+	h := newFakeHarness(t, apptest.Empty(t), 100, 30)
+	h.keys("?", "q")
+	if h.quit || h.m().help {
+		t.Errorf("q in the help: quit %v, help %v", h.quit, h.m().help)
 	}
 }
 

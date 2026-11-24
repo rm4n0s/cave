@@ -94,7 +94,9 @@ func (m Model) tabs() string {
 // lines.
 func (m Model) body(height int) []string {
 	var lines []string
-	if m.help {
+	if m.ask != nil {
+		lines = m.ask.q.view(m.width, height, m.st)
+	} else if m.help {
 		lines = m.helpLines()
 	} else {
 		lines = m.pageLines(height)
@@ -150,6 +152,9 @@ func (m Model) messageLine() string {
 
 // footer is the last line: the keys of the page, then the two that are always there.
 func (m Model) footer() string {
+	if m.ask != nil {
+		return m.st.key.Render("y") + " " + m.ask.q.yes + "   " + m.st.key.Render("n") + " cancel"
+	}
 	rows := append(append([]binding(nil), pageBindings(m.page)...), binding{"?", "keys"}, binding{"q", "quit"})
 	parts := make([]string, len(rows))
 	for i, r := range rows {
