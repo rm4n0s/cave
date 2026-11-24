@@ -149,15 +149,15 @@ func (f *fixture) close(a *App) {
 	}
 }
 
-// person adds a person with a new key, straight in the store: the commands come with step 4.2.
+// person adds a person with a new key, through the commands.
 func (f *fixture) person(a *App, name string) sshtest.Key {
 	f.t.Helper()
-	p, err := a.people.Add(ctx, name)
+	p, err := a.AddPerson(ctx, name)
 	if err != nil {
 		f.t.Fatal(err)
 	}
 	key := sshtest.NewKey(f.t, sshtest.Ed25519)
-	if _, err := a.people.AddKeys(ctx, p.ID, key.AuthorizedKey); err != nil {
+	if _, err := a.AddKeys(ctx, p.ID, key.AuthorizedKey); err != nil {
 		f.t.Fatal(err)
 	}
 	return key

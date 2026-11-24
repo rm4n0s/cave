@@ -1,0 +1,13 @@
+$ go test -v -count=1 -run TestScenarioWithOpenSSH ./internal/app
+=== RUN   TestScenarioWithOpenSSH
+    scenario_linux_test.go:27: 1. added alice with one key; the line to give her is: ssh -p 40755 alice@127.0.0.1
+    scenario_linux_test.go:31: $ ssh alice@127.0.0.1 echo hello  (exit status 0)
+    scenario_linux_test.go:40: 2. alice ran a command; the list has 1 entry: alice, accepted, 1 time
+    scenario_linux_test.go:51: 3. connected now: alice from 127.0.0.1
+    scenario_linux_test.go:58: 4. disconnected alice; nobody is connected
+    scenario_linux_test.go:61: $ ssh mallory@127.0.0.1 true  (exit status 255)
+    scenario_linux_test.go:74: 5. mallory was refused; the list has 2 entries: alice accepted, unknownName as mallory
+    scenario_linux_test.go:83: 6. cleared the list; it is empty
+--- PASS: TestScenarioWithOpenSSH
+PASS
+ok  	github.com/rm4n0s/cave/internal/app

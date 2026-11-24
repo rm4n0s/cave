@@ -258,3 +258,14 @@ One entry per finished step of `docs/IMPLEMENTATION.md`, newest last. Format:
 - **Proof**: none
 - **Manual checks**: none
 - **Glutter issues**: none
+
+## Step 4.2: Commands
+- **Date**: 2026-11-24
+- **Branch**: feat/step-4.2-commands
+- **Summary**: `internal/app/commands.go`: the commands of SPEC §10 as methods of `*App` (`AddPerson`, `RenamePerson`, `SetPersonEnabled`, `RemovePerson`, `AddKeys`, `ImportKeys`, `SetKeyComment`, `RemoveKey`, `ClearAttempts`, `RemoveAttempt`, `Disconnect`, `DisconnectAll`, `NewHostKey`) and `CountConnections`. Each hands its work to the store or the server and returns the error untouched, so its Tag and route reach the UIs; the `Changed` events and the disconnecting of a changed person come from the stores and the server, not from the commands.
+- **Decisions**: `ClearAttempts` saves the list at once (a list cleared by hand is not back after a crash). `NewHostKey` takes `serverMu` like the commands that move the server, replaces the key the snapshot reads, hands the signer to the server and sends a `Server` event; open connections stay open. `DisconnectAll` returns nothing (SPEC §10 updated by the plan's commit).
+- **Checks**: `scripts/checks.sh` passed, every check (gofmt, vet for Linux and Windows, golangci-lint, race tests as a debug build, cgo-free build and tests, Windows build, error tags: none untested, the Wine run). `pgrep` shows no process of the step left.
+- **Tests**: `app`: every command's success; each error's route (a bad and a taken name, a person, key, attempt or connection that is not there, no key in the text, a key another person has); renaming, disabling and removing a person and removing a key each close a connected client; `Disconnect` closes one connection and `DisconnectAll` the rest; `ClearAttempts` empties the list and the file and sets the time cleared; `NewHostKey` changes the fingerprint, keeps the open connection, refuses a client that expects the old key, accepts one that expects the new one, and writes the key with mode 0600; `CountConnections`; a scenario with the real `ssh` (add a person and a key, run a command, see the connection and the attempt, disconnect, be refused as an unknown name, clear).
+- **Proof**: [4.2-app.txt](implemented-proof-images/4.2-app.txt), the transcript of the scenario test.
+- **Manual checks**: none
+- **Glutter issues**: none
