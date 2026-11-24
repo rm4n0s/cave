@@ -1,6 +1,6 @@
 // Package agentfwd is the session's side of agent forwarding (docs/SPEC.md §9.8): a private
 // place where the programs of a session find an SSH agent, whose connections Cave carries to the
-// agent of the client. On Linux it is a Unix socket; on Windows a named pipe, from step 7.4.
+// agent of the client. On Linux it is a Unix socket; on Windows a named pipe.
 package agentfwd
 
 import (
@@ -10,13 +10,17 @@ import (
 
 // The Tags of this package's errors.
 const (
-	TagRuntimeDirFailed = "AgentRuntimeDirFailed"
-	TagDirFailed        = "AgentDirFailed"
-	TagListenFailed     = "AgentListenFailed"
-	TagModeFailed       = "AgentModeFailed"
-	TagAcceptFailed     = "AgentAcceptFailed"
-	TagOpenFailed       = "AgentOpenFailed"
-	TagUnsupported      = "AgentUnsupported"
+	TagRuntimeDirFailed     = "AgentRuntimeDirFailed"
+	TagDirFailed            = "AgentDirFailed"
+	TagListenFailed         = "AgentListenFailed"
+	TagModeFailed           = "AgentModeFailed"
+	TagAcceptFailed         = "AgentAcceptFailed"
+	TagOpenFailed           = "AgentOpenFailed"
+	TagPipeUserFailed       = "AgentPipeUserFailed"
+	TagPipeDescriptorFailed = "AgentPipeDescriptorFailed"
+	TagPipeCreateFailed     = "AgentPipeCreateFailed"
+	TagPipeConnectFailed    = "AgentPipeConnectFailed"
+	TagPipeNextFailed       = "AgentPipeNextFailed"
 )
 
 const (

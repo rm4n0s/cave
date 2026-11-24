@@ -10,3 +10,7 @@ Every error Tag has a test that asserts its route (CLAUDE.md "Definition of done
 - `PtyInputPipeFailed`: `CreatePipe` fails only when Windows is out of handles or memory, which a test cannot cause
 - `PtyOutputPipeFailed`: `CreatePipe` fails only when Windows is out of handles or memory, which a test cannot cause
 - `PtyConsoleFailed`: `CreatePseudoConsole` fails for a Windows older than 10 1809 or when it is out of resources; no test can make either happen
+- `AgentPipeUserFailed`: reading the user of the process token fails only when Windows is out of resources, which a test cannot cause
+- `AgentPipeDescriptorFailed`: the descriptor string is built from a SID Windows itself gave, so Windows always accepts it
+- `AgentPipeConnectFailed`: `ConnectNamedPipe` on an instance this package just made fails only for a broken system, which a test cannot cause
+- `AgentPipeNextFailed`: making the next instance of a pipe that exists fails only when Windows is out of resources, which a test cannot cause

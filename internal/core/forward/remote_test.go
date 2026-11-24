@@ -66,7 +66,7 @@ func refused(t *testing.T, address string) {
 	deadline := time.Now().Add(servertest.WaitFor)
 	for {
 		conn, err := net.DialTimeout("tcp", address, time.Second)
-		if errors.Is(err, syscall.ECONNREFUSED) {
+		if errors.Is(err, errnoRefused) {
 			return
 		}
 		if err == nil {
@@ -311,7 +311,7 @@ func TestAPortTheClientChooses(t *testing.T) {
 	if logged.Tag != TagListenFailed || !logged.HasRoute("handler.listen.ForwardListenFailed") || logged.Metadata["host"] != "127.0.0.1" {
 		t.Errorf("logged %+v with the route %s", logged, logged.Route())
 	}
-	if !strings.Contains(logged.OriginalErr, "address already in use") {
+	if !addressInUse(logged.OriginalErr) {
 		t.Errorf("the cause is %q", logged.OriginalErr)
 	}
 	// A cancel for another port, or another host, closes nothing.

@@ -11,6 +11,7 @@ import (
 	"log/slog"
 	"net"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -173,7 +174,7 @@ func reason(err error) string {
 	}
 	var errno syscall.Errno
 	if errors.As(err, &errno) {
-		return errno.Error()
+		return strings.TrimRight(errno.Error(), ". ") // Windows ends its words with a full stop
 	}
 	var dnsErr *net.DNSError
 	if errors.As(err, &dnsErr) && dnsErr.IsNotFound {

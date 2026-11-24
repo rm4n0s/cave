@@ -3,6 +3,8 @@ package session
 import (
 	"bufio"
 	"bytes"
+	"crypto/ed25519"
+	"crypto/rand"
 	"io"
 	"os"
 	"os/exec"
@@ -22,6 +24,7 @@ import (
 	"github.com/rm4n0s/cave/internal/core/wine"
 	"github.com/rm4n0s/errors"
 	"golang.org/x/crypto/ssh"
+	"golang.org/x/crypto/ssh/agent"
 	"golang.org/x/sys/windows"
 )
 
@@ -495,4 +498,69 @@ func TestTheSftpSubsystemStartsOnWindows(t *testing.T) {
 // fromSFTPHome is the home folder as an SFTP client sees it: "/C:/Users/ada".
 func fromSFTPHome(home string) string {
 	return "/" + strings.ReplaceAll(home, `\`, "/")
+}
+
+func TestAgentForwardingOnWindows(t *testing.T) {
+	f := newWinFixture(t)
+	_, private, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyring := agent.NewKeyring()
+	if err := keyring.Add(agent.AddedKey{PrivateKey: private}); err != nil {
+		t.Fatal(err)
+	}
+	if err := agent.ForwardToAgent(f.client, keyring); err != nil {
+		t.Fatal(err)
+	}
+	sess, err := f.client.NewSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = sess.Close() }()
+	if err := agent.RequestAgentForwarding(sess); err != nil {
+		t.Fatalf("auth-agent-req: %v", err)
+	}
+	stdin, err := sess.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = stdin.Close() }()
+	stdout, err := sess.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The session prints its environment, then waits for input that never comes.
+	if err := sess.Start("set & " + helperCommand("cat")); err != nil {
+		t.Fatal(err)
+	}
+	var pipe string
+	reader := bufio.NewReader(stdout)
+	for pipe == "" {
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			t.Fatalf("the output ended without SSH_AUTH_SOCK: %v", err)
+		}
+		pipe = strings.TrimSpace(strings.TrimPrefix(line, "SSH_AUTH_SOCK="))
+		if !strings.HasPrefix(line, "SSH_AUTH_SOCK=") {
+			pipe = ""
+		}
+	}
+	if !strings.HasPrefix(pipe, `\\.\pipe\cave-agent-`) {
+		t.Fatalf("SSH_AUTH_SOCK is %q", pipe)
+	}
+	// The pipe leads to the client's agent: it lists the one key.
+	conn, err := os.OpenFile(pipe, os.O_RDWR, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+	keys, err := agent.NewClient(conn).List()
+	if err != nil || len(keys) != 1 {
+		t.Fatalf("the agent behind SSH_AUTH_SOCK lists %v, %v", keys, err)
+	}
+	// Without a forwarded agent the variable is not there.
+	if got := f.run("set", ""); strings.Contains(got.stdout, "SSH_AUTH_SOCK") {
+		t.Errorf("a session that asked for no agent has SSH_AUTH_SOCK:\n%s", got.stdout)
+	}
 }

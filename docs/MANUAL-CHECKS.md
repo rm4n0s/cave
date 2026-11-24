@@ -33,3 +33,13 @@ ssh -t <person>@<pc>
 ```
 
 Does it give a `cmd.exe` prompt? Does `dir` print? Does `echo %CAVE_PERSON%` print the person's name? Does resizing the terminal window change what `mode con` shows? Does `exit` end the session? (`ssh -t <person>@<pc> exit 5` must give the status 5: `echo %ERRORLEVEL%` or `echo $?` afterwards.)
+
+## Step 7.4: agent forwarding on a Windows PC
+
+Wine has no OpenSSH, and ignores `FILE_FLAG_FIRST_PIPE_INSTANCE` (the test of a taken pipe name skips there). On a Windows PC, with `tcave.exe` running, the OpenSSH client's agent running (`Get-Service ssh-agent`, `ssh-add` with a key) and a person added whose key that agent has:
+
+```
+ssh -A <person>@<pc> ssh-add -l
+```
+
+Does it list the key of your agent (the one of the computer you typed it on, not the PC's)? Does `echo %SSH_AUTH_SOCK%` in `ssh -A <person>@<pc>` print `\\.\pipe\cave-agent-…`?

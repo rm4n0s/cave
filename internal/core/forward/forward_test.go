@@ -297,7 +297,7 @@ func TestAPortNobodyListensOn(t *testing.T) {
 	f := newFixture(t, nil)
 	_, err = f.client.Dial("tcp", closed)
 	refused := refusal(t, err)
-	if refused.Reason != ssh.ConnectionFailed || refused.Message != "connect failed: connection refused" {
+	if refused.Reason != ssh.ConnectionFailed || refused.Message != "connect failed: "+refusedMessage {
 		t.Errorf("refused with %v %q", refused.Reason, refused.Message)
 	}
 	logged := f.LoggedError("forward failed")
@@ -496,7 +496,7 @@ func TestReason(t *testing.T) {
 		err  error
 		want string
 	}{
-		{"refused", &net.OpError{Op: "dial", Err: errnoRefused}, "connection refused"},
+		{"refused", &net.OpError{Op: "dial", Err: errnoRefused}, refusedMessage},
 		{"a name nobody has", &net.DNSError{Err: "no such host", Name: "nowhere.invalid", IsNotFound: true}, "no such host"},
 		{"a name server that fails", &net.DNSError{Err: "server misbehaving", Name: "nowhere.invalid"}, "the connection could not be made"},
 		{"timed out", errors.NewErr(TagDialTimedOut, context.Canceled), "timed out"},
