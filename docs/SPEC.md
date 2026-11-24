@@ -352,7 +352,11 @@ Version 3 of the protocol (draft-ietf-secsh-filexfer-02), as OpenSSH's `sftp-ser
 
 ### 9.8 Forwarding
 
-- **`direct-tcpip`** (`-L`, `-D`): when `forwarding.local` is on, Cave connects to the host and port asked (15-second limit) and copies both ways. Off: the channel is refused as `administratively prohibited`. A failed connection is refused as `connect failed`.
+- **`direct-tcpip`** (`-L`, `-D`): when `forwarding.local` is on, Cave connects to the host and port asked (15-second limit) and copies both ways. Off: the channel is refused as `administratively prohibited`, before anything is connected to. A failed connection is refused as `connect failed`, with the system's word for it ("connection refused", "timed out", "no such host") and no address; the error is logged.
+  - The host is a name or an address of printable ASCII without spaces, at most 255 characters, and the port is 1 to 65535; anything else is refused as `connect failed` ("invalid forwarding request") and nothing is connected to. Cave connects wherever the OS user could: forwarding is a feature the user turns on or off as a whole.
+  - Each side may stop sending and still receive: the end of one way is passed on (a TCP half-close) and the forward ends when both ways are done, or with the connection. A connection attempt also ends when the client's connection does.
+  - The registry shows a forward in use as `local-forward` with `host:port`; its opening and its closing (with the bytes each way) are logged.
+  - Forwarding to Unix sockets (`direct-streamlocal@openssh.com`) is not in this version: the channel type is unknown.
 - **`tcpip-forward`** (`-R`): when `forwarding.remote` is on, Cave listens and opens a `forwarded-tcpip` channel for each connection that arrives. With `forwarding.gatewayPorts` off, it listens on loopback whatever address was asked (`127.0.0.1`, or `::1` when the address asked is an IPv6 literal); on, it listens on the address asked (empty, `*` and `0.0.0.0` mean every interface; `localhost` means loopback). Port 0 lets the OS choose, and the reply carries the port. At most 32 listeners per connection. `cancel-tcpip-forward` closes one; the end of the connection closes all.
 - **Agent** (`auth-agent-req@openssh.com`): when `forwarding.agent` is on, the session gets a private socket (Linux: `agent.sock` in a new `0700` folder under the runtime folder, the socket `0600`) whose connections are carried to the client over `auth-agent@openssh.com` channels. The socket is removed when the session ends.
 

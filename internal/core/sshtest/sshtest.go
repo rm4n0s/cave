@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -418,6 +419,56 @@ func (o *OpenSSH) log(res Result, program string, args []string) {
 // Remote returns "user@host:path" for scp.
 func (o *OpenSSH) Remote(user, path string) string {
 	return user + "@" + o.host + ":" + path
+}
+
+// ShortDir makes a folder with a short path, removed when the test ends: the path of a socket
+// must be short, and t.TempDir() can be too long for one.
+func ShortDir(t testing.TB) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("", "cave-sock-")
+	if err != nil {
+		t.Fatalf("sshtest: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := os.RemoveAll(dir); err != nil {
+			t.Errorf("sshtest: %v", err)
+		}
+	})
+	return dir
+}
+
+// Start starts "ssh -N <options> user@host" in the background: a connection that only carries
+// what the options ask for, such as "-L" or "-R". It is killed when the test ends, or by the
+// returned function, which also returns what ssh wrote to its error stream.
+func (o *OpenSSH) Start(user string, key Key, options ...string) (stop func() string) {
+	o.t.Helper()
+	args := append(o.Options(key), "-N", "-p", o.port)
+	args = append(args, options...)
+	args = append(args, user+"@"+o.host)
+	cmd := exec.Command("ssh", args...)
+	cmd.Env = o.Env()
+	cmd.Dir = o.dir
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Start(); err != nil {
+		o.t.Fatalf("sshtest: ssh -N: %v", err)
+	}
+	o.t.Logf("$ ssh -N %s %s@%s &", strings.Join(options, " "), user, o.host)
+	ended := make(chan struct{})
+	go func() {
+		_ = cmd.Wait() // how it ended does not matter: it is ended on purpose
+		close(ended)
+	}()
+	var once sync.Once
+	stop = func() string {
+		once.Do(func() {
+			_ = cmd.Process.Kill() // already gone when ssh ended by itself
+			<-ended
+		})
+		return stderr.String()
+	}
+	o.t.Cleanup(func() { stop() })
+	return stop
 }
 
 // StartAgent starts a real ssh-agent on a socket under a temporary folder, adds the keys to it,

@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"encoding/json"
 	"github.com/rm4n0s/cave/internal/core/attempts"
 	"github.com/rm4n0s/cave/internal/core/clock"
 	"github.com/rm4n0s/cave/internal/core/hostkey"
@@ -21,7 +22,9 @@ import (
 	"github.com/rm4n0s/cave/internal/core/sshtest"
 	"github.com/rm4n0s/cave/internal/core/storage"
 	"github.com/rm4n0s/cave/internal/core/storage/storagetest"
+	"github.com/rm4n0s/errors"
 	"golang.org/x/crypto/ssh"
+	"strings"
 )
 
 // WaitFor is how long a test waits for the server's side of something a client did.
@@ -180,4 +183,23 @@ func (f *Fixture) WaitConnections(n int) []server.Connection {
 func (f *Fixture) OpenSSH() *sshtest.OpenSSH {
 	f.t.Helper()
 	return sshtest.NewOpenSSH(f.t, f.Addr, f.HostKey.Signer().PublicKey())
+}
+
+// LoggedError returns the error of the last line of the log that has the message, as it was
+// logged: its Tag, route and metadata can be asserted like those of the error itself. The test
+// stops when the log has no such line.
+func (f *Fixture) LoggedError(message string) errors.ErrorJson {
+	f.t.Helper()
+	lines := strings.Split(strings.TrimSpace(f.Log.String()), "\n")
+	for i := len(lines) - 1; i >= 0; i-- {
+		var entry struct {
+			Msg string           `json:"msg"`
+			Err errors.ErrorJson `json:"err"`
+		}
+		if err := json.Unmarshal([]byte(lines[i]), &entry); err == nil && entry.Msg == message {
+			return entry.Err
+		}
+	}
+	f.t.Fatalf("servertest: the log has no line %q:\n%s", message, f.Log.String())
+	return errors.ErrorJson{}
 }
