@@ -63,6 +63,7 @@ cmd/tcave ► internal/tui ┘
 | `internal/core/sftp` | The SFTP version 3 server (§9.7) |
 | `internal/core/forward` | `direct-tcpip` and `tcpip-forward` (§9.8) |
 | `internal/core/agentfwd` | Agent forwarding: the socket or pipe that sessions see (§9.8) |
+| `internal/core/wine` | `Running()`: whether a test runs under Wine, so it can skip what Wine cannot do (§13.6); only tests use it |
 | `internal/core/netinfo` | The addresses of this computer, for "how to connect" |
 | `internal/core/sshtest` | Test harness: keys, an in-process client, and the real OpenSSH programs, isolated (§14) |
 | `internal/gui/...` | The desktop UI (§11); `internal/gui/testutil` has the test fonts and pumps |

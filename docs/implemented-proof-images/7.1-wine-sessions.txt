@@ -1,0 +1,19 @@
+$ scripts/test-windows.sh -v -count=1 -run Exec\|Job\|Signal ./internal/core/session
+=== RUN   TestExecOnWindows
+=== RUN   TestExecOnWindows/output_and_success
+=== RUN   TestExecOnWindows/an_exit_status
+=== RUN   TestExecOnWindows/the_command_reaches_the_shell_as_written
+=== RUN   TestExecOnWindows/a_command_that_does_not_exist
+=== RUN   TestExecOnWindows/the_working_folder_is_the_home
+--- PASS: TestExecOnWindows
+    --- PASS: TestExecOnWindows/output_and_success
+    --- PASS: TestExecOnWindows/an_exit_status
+    --- PASS: TestExecOnWindows/the_command_reaches_the_shell_as_written
+    --- PASS: TestExecOnWindows/a_command_that_does_not_exist
+    --- PASS: TestExecOnWindows/the_working_folder_is_the_home
+=== RUN   TestJobEndsWhatTheSessionStarted
+--- PASS: TestJobEndsWhatTheSessionStarted
+=== RUN   TestSignalOnWindows
+--- PASS: TestSignalOnWindows
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/session

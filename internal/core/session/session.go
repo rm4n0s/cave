@@ -23,7 +23,6 @@ import (
 const (
 	TagSessionStartFailed = "SessionStartFailed"
 	TagSessionPipeFailed  = "SessionPipeFailed"
-	TagSessionUnsupported = "SessionUnsupported"
 )
 
 // The limits of docs/SPEC.md §9.4.
@@ -111,6 +110,9 @@ type process struct {
 	cmd *exec.Cmd
 	// exited is closed when the process ended.
 	exited chan struct{}
+	// group is what the platform keeps to end the process and what it started: nothing on Linux,
+	// where the process leads a process group, and the job object on Windows.
+	group processGroup
 }
 
 // serve runs one session channel until the process it started has ended and reported, or the
@@ -172,7 +174,7 @@ func (s *session) request(request *ssh.Request) {
 	case "signal":
 		var payload struct{ Signal string }
 		if err := ssh.Unmarshal(request.Payload, &payload); err == nil && s.proc != nil {
-			ok = signalProcess(s.proc.cmd, payload.Signal)
+			ok = signalProcess(s.proc, payload.Signal)
 		}
 	case "pty-req":
 		ok = s.requestPty(request.Payload)
@@ -300,7 +302,7 @@ func (s *session) start(command string, login bool) bool {
 	}
 	s.started = true
 	snap := s.h.opts.Settings.Snapshot()
-	shell := PickShell(snap.String(settings.SessionShell), s.h.opts.User, s.h.opts.Environ)
+	shell := defaultShell(snap.String(settings.SessionShell), s.h.opts.User, s.h.opts.Environ)
 	in := EnvInput{
 		User: s.h.opts.User.Name, Home: s.h.opts.User.Home, Shell: shell, Cave: s.h.opts.Environ, Client: s.env,
 		Remote: s.conn.RemoteAddr(), Local: s.conn.LocalAddr(), Person: s.conn.PersonName(),
@@ -311,7 +313,7 @@ func (s *session) start(command string, login bool) bool {
 	if s.agent != nil {
 		in.AuthSock = s.agent.Path()
 	}
-	env := BuildEnv(in)
+	env := sessionEnv(in)
 	kind, detail := server.ActivityExec, command
 	if login {
 		kind, detail = server.ActivityShell, ""
@@ -348,7 +350,7 @@ func (s *session) start(command string, login bool) bool {
 		}()
 	}
 	go func() {
-		status, signal := wait(proc.cmd)
+		status, signal := wait(proc)
 		close(proc.exited)
 		// The process ended. Its descendants may still hold the pipes: what they write within
 		// DrainTime is still sent, then the pipes are closed under them.
@@ -366,6 +368,7 @@ func (s *session) start(command string, login bool) bool {
 			_ = stderr.Close()
 		}
 		copies.Wait()
+		endGroup(proc)
 		remove()
 		logger.Info("session ended", "status", status, "signal", signal)
 		s.finish(status, signal)
@@ -430,7 +433,7 @@ func (s *session) hangUp() {
 			_ = s.pty.Close() // the system sends SIGHUP to the processes on the terminal
 			return
 		}
-		hangUpProcess(s.proc.cmd)
+		hangUpProcess(s.proc)
 	}
 }
 
@@ -473,7 +476,14 @@ func (h *handler) spawn(shell, command string, login bool, env []string, stdin i
 		closeAll()
 		return nil, nil, nil, errors.NewErr(TagSessionStartFailed, err).SetMetadata("shell", sanitize.Display(shell, maxCommandLog))
 	}
-	proc := &process{cmd: cmd, exited: make(chan struct{})}
+	group, err := startGroup(cmd)
+	if err != nil {
+		_ = cmd.Process.Kill() // the process runs outside its group: it is not left behind
+		_ = cmd.Wait()         // collects it; how it ended does not matter
+		closeAll()
+		return nil, nil, nil, err
+	}
+	proc := &process{cmd: cmd, exited: make(chan struct{}), group: group}
 
 	if terminal != nil {
 		// The process has the terminal; Cave keeps only the master side.
