@@ -39,4 +39,6 @@ type App interface {
 	RemoveAttempt(ctx context.Context, id string) error
 	Disconnect(ctx context.Context, id string) error
 	DisconnectAll()
+	Set(ctx context.Context, key string, value any) error
+	NewHostKey(ctx context.Context) error
 }

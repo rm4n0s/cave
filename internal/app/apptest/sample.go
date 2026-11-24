@@ -43,9 +43,9 @@ func ahead(d time.Duration) time.Time { return Now.Add(d) }
 
 const day = 24 * time.Hour
 
-// sampleSettings opens a settings store in an isolated folder, sets the values and returns its
-// snapshot: a snapshot cannot be made any other way.
-func sampleSettings(t testing.TB, values map[string]any) settings.Snapshot {
+// SampleSettings returns the snapshot of the settings with the values set over the defaults. A
+// snapshot cannot be made by hand, so it is read from a store in an isolated folder.
+func SampleSettings(t testing.TB, values map[string]any) settings.Snapshot {
 	t.Helper()
 	store, err := settings.Open(context.Background(), storagetest.Isolate(t))
 	if err != nil {
@@ -79,7 +79,7 @@ func Empty(t testing.TB) *Fake {
 	t.Helper()
 	return &Fake{
 		ServerSnapshot:   baseServer(server.Stopped),
-		SettingsSnapshot: sampleSettings(t, nil),
+		SettingsSnapshot: SampleSettings(t, nil),
 		Clock:            clock.NewFake(Now),
 	}
 }
@@ -91,7 +91,7 @@ func Sample(t testing.TB) *Fake {
 	t.Helper()
 	f := &Fake{
 		ServerSnapshot:   baseServer(server.Running),
-		SettingsSnapshot: sampleSettings(t, map[string]any{string(settings.AttemptsClear): settings.ClearWeekly}),
+		SettingsSnapshot: SampleSettings(t, map[string]any{string(settings.AttemptsClear): settings.ClearWeekly}),
 		Clock:            clock.NewFake(Now),
 	}
 	f.PeopleList = []people.Person{

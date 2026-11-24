@@ -75,7 +75,7 @@ func pageBindings(p page) []binding {
 	case pageConnections:
 		return []binding{{"d", "disconnect"}, {"D", "disconnect all"}}
 	case pageSettings:
-		return nil
+		return []binding{{"enter/space", "change"}}
 	}
 	return nil
 }

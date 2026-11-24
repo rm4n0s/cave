@@ -1,0 +1,30 @@
+Cave   running on port 2222                                                 1 connected · 9 attempts
+1 Overview  2 People  3 Attempts  4 Connections  [5 Settings]                                       
+────────────────────────────────────────────────────────────────────────────────────────────────────
+Server                                                                                              
+> Port                                   2222                                                       
+  Address                                —                                                          
+  Start when Cave starts                 on                                                         
+  Keep-alive (seconds)                   60                                                         
+                                                                                                    
+Attempts list                                                                                       
+  Clear the list                         weekly                                                     
+                                                                                                    
+Sessions                                                                                            
+  Shell                                  —                                                          
+  Variables clients may set              LANG, LC_*                                                 
+                                                                                                    
+File transfer and forwarding                                                                        
+  File transfer (SFTP)                   on                                                         
+  Local forwarding                       on                                                         
+  Remote forwarding                      on                                                         
+  Forwarded ports open to the network    off                                                        
+  Agent forwarding                       on                                                         
+                                                                                                    
+The port Cave listens on for connections.                                                           
+                                                                                                    
+The value is not acceptable for server.port: it must be between 1 and 65535.                        
+Port: 70000                                                                                         
+────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                    
+enter ok   esc cancel                                                                               

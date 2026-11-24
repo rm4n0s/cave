@@ -124,9 +124,9 @@ func (r *Real) Addr() string {
 	return net.JoinHostPort("127.0.0.1", strconv.Itoa(r.Port))
 }
 
-// hostKey reads the server's host public key from its file, so that it is the current one after
+// HostKey reads the server's host public key from its file, so that it is the current one after
 // a new host key was made.
-func (r *Real) hostKey() ssh.PublicKey {
+func (r *Real) HostKey() ssh.PublicKey {
 	r.t.Helper()
 	data, err := os.ReadFile(filepath.Join(r.Dirs.Config, hostkey.PublicFileName))
 	if err != nil {
@@ -159,7 +159,7 @@ func (r *Real) Person(name string) sshtest.Key {
 func (r *Real) Connect(name string, key sshtest.Key) *ssh.Client {
 	r.t.Helper()
 	before := len(r.App.Connections())
-	client := sshtest.Dial(r.t, r.Addr(), name, key, r.hostKey())
+	client := sshtest.Dial(r.t, r.Addr(), name, key, r.HostKey())
 	r.Eventually("the application does not show the connection", func() bool {
 		return len(r.App.Connections()) == before+1
 	})
@@ -170,7 +170,7 @@ func (r *Real) Connect(name string, key sshtest.Key) *ssh.Client {
 // the person's) and returns when it has been refused; it leaves an entry in the attempts list.
 func (r *Real) Refuse(name string, key sshtest.Key) {
 	r.t.Helper()
-	if _, err := sshtest.DialErr(r.t, r.Addr(), sshtest.ClientConfig(name, r.hostKey(), key)); err == nil {
+	if _, err := sshtest.DialErr(r.t, r.Addr(), sshtest.ClientConfig(name, r.HostKey(), key)); err == nil {
 		r.t.Fatalf("the server let %q in, and should have refused", name)
 	}
 }

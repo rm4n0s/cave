@@ -89,6 +89,11 @@ type Model struct {
 	// The Connections page: the selection, kept by the connection's id.
 	connList list
 	connSel  string
+
+	// The Settings page: the selection among the rows that can be changed, and the first line
+	// shown (kept, so that the page scrolls only when the selection leaves it).
+	settingsList  list
+	settingsFirst int
 	// message is the text of the message line; messageErr says that it is an error.
 	message    string
 	messageErr bool
@@ -120,6 +125,7 @@ func (m *Model) refresh() {
 	m.syncKeys()
 	m.syncAttempts()
 	m.syncConnections()
+	m.syncSettings()
 }
 
 // Init starts nothing: the program sends the size by itself.
@@ -136,6 +142,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.keyList.setHeight(m.height - chrome - 2)
 		m.attemptList.setHeight(m.height - chrome - 2)
 		m.connList.setHeight(m.height - chrome - 1)
+		m.syncSettings()
 	case changedMsg, tickMsg:
 		m.refresh()
 	case doneMsg:
@@ -159,6 +166,17 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// doneSentence is the sentence that says why a prompt's command failed, or "" when it did not.
+func doneSentence(done promptDone) string {
+	if done.failure != "" {
+		return done.failure
+	}
+	if done.err != nil {
+		return app.Message(done.err)
+	}
+	return ""
+}
+
 // promptEnded is what the end of a prompt's command does: close the prompt, or show why it
 // failed. The end of a prompt that was closed meanwhile is ignored.
 func (m Model) promptEnded(done promptDone) Model {
@@ -175,9 +193,9 @@ func (m Model) promptEnded(done promptDone) Model {
 	if m.prompt == nil || m.prompt.id != done.id {
 		return m
 	}
-	if done.err != nil {
+	if sentence := doneSentence(done); sentence != "" {
 		p := *m.prompt
-		p.err, p.busy = app.Message(done.err), false
+		p.err, p.busy = sentence, false
 		m.prompt = &p
 		return m
 	}
@@ -231,7 +249,9 @@ func (m Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m.keyAttempts(msg)
 		case pageConnections:
 			return m.keyConnections(msg)
-		case pageOverview, pageSettings, pageCount:
+		case pageSettings:
+			return m.keySettings(msg)
+		case pageOverview, pageCount:
 		}
 	}
 	return m, nil

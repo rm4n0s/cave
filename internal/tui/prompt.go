@@ -33,6 +33,9 @@ type promptDone struct {
 	id       int
 	err      error
 	selectID string
+	// failure is a sentence of the prompt's own for a text it could not use, such as "Type a
+	// number."; the prompt stays open with it, as it does for err.
+	failure string
 }
 
 // openPrompt opens a prompt with a text in its field.

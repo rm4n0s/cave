@@ -130,6 +130,8 @@ func (m Model) pageLines(height int) []string {
 		return m.attemptLines(height)
 	case pageConnections:
 		return m.connectionLines(height)
+	case pageSettings:
+		return m.settingsLines(height)
 	case pagePeople:
 		if m.personID != "" {
 			return m.personLines(height)
