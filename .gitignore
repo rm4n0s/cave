@@ -33,11 +33,11 @@ go.work.sum
 # .idea/
 # .vscode/
 
-# the binaries of `go build ./cmd/cave ./cmd/cave-tui` in the repo root
+# the binaries of `go build ./cmd/cave ./cmd/tcave` in the repo root
 /cave
-/cave-tui
+/tcave
 /cave.exe
-/cave-tui.exe
+/tcave.exe
 
 # release builds (scripts/build-release.sh)
 /dist/

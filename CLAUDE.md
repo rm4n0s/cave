@@ -3,7 +3,7 @@
 Guidance for Claude Code when working in this repository (Go, hosted on GitHub). The development process and the error handling are those of [Emetos](https://github.com/rm4n0s/emetos)'s `CLAUDE.md` (the user, 2026-11-24: "use the CLAUDE.md from github.com/rm4n0s/emetos for the development process and error handling"), adapted to this project.
 
 ## Project
-Cave does the job of `sshd`, as an application that an ordinary user starts and watches: a desktop application (`cave`) or a terminal UI (`cave-tui`). The user adds **people**, gives each of them public keys, and sees who tried to connect and how many times. It needs no root: every session runs as the OS user who started Cave. The SSH server is `golang.org/x/crypto/ssh`; the desktop UI is built on [Glutter](https://github.com/rm4n0s/glutter), a cgo-free GUI toolkit for Go with Flutter's framework API; the TUI is built on Bubble Tea and Lip Gloss. Cave targets Linux and Windows 10 1809+ (tested under Wine); macOS comes later (the user, 2026-11-24). The system's parts have `_linux.go` and `_windows.go` files with the same function names, and tests that cannot run on both say why in `t.Skip`.
+Cave does the job of `sshd`, as an application that an ordinary user starts and watches: a desktop application (`cave`) or a terminal UI (`tcave`). The user adds **people**, gives each of them public keys, and sees who tried to connect and how many times. It needs no root: every session runs as the OS user who started Cave. The SSH server is `golang.org/x/crypto/ssh`; the desktop UI is built on [Glutter](https://github.com/rm4n0s/glutter), a cgo-free GUI toolkit for Go with Flutter's framework API; the TUI is built on Bubble Tea and Lip Gloss. Cave targets Linux and Windows 10 1809+ (tested under Wine); macOS comes later (the user, 2026-11-24). The system's parts have `_linux.go` and `_windows.go` files with the same function names, and tests that cannot run on both say why in `t.Skip`.
 
 **`docs/SPEC.md` is the source of truth.** Read the sections that cover a task before starting it. If the code and the spec disagree, or a task needs a decision the spec doesn't make, ask instead of guessing. When a decision changes, update the spec on the same branch.
 
@@ -21,8 +21,8 @@ Cave does the job of `sshd`, as an application that an ordinary user starts and 
 - Lint: `golangci-lint run`
 - Format: `gofmt -w cmd internal`
 - Run the desktop app: `go run -tags debug_mode ./cmd/cave` (it uses your real configuration)
-- Run the TUI: `go run ./cmd/cave-tui`
-- Run either isolated from your configuration: `scripts/isolated.sh [--config <fixture dir>] -- go run ./cmd/cave-tui <args>`
+- Run the TUI: `go run ./cmd/tcave`
+- Run either isolated from your configuration: `scripts/isolated.sh [--config <fixture dir>] -- go run ./cmd/tcave <args>`
 - Make a proof: `scripts/proof.sh <out.png> ...` for the desktop app and `scripts/tui-proof.sh <out.txt> ...` for the TUI (docs/IMPLEMENTATION.md "Proof methods")
 - After changing dependencies: `go mod tidy`
 
@@ -37,7 +37,7 @@ Before reporting a task as finished, run `gofmt` (on `cmd` and `internal`), `go 
 `scripts/checks.sh` runs all of them in this order and stops at the first that fails.
 
 ## Layout
-- `cmd/cave/` is the desktop application's `main` package; `cmd/cave-tui/` is the TUI's
+- `cmd/cave/` is the desktop application's `main` package; `cmd/tcave/` is the TUI's
 - `internal/core/...` is everything that is not UI: storage, settings, people and their keys, the attempts list, the host key, the SSH server, sessions and PTYs, SFTP, forwarding. It never imports Glutter, Bubble Tea, Lip Gloss, `internal/gui` or `internal/tui`, so it is tested without a UI
 - `internal/app/` is the application behind both UIs: it owns the core's objects, runs the server, and gives the UIs snapshots, commands and change events. It imports the core and no UI library
 - `internal/gui/...` is the desktop UI on Glutter; `internal/tui/...` is the terminal UI on Bubble Tea. Both import `internal/app`, never each other, and nothing imports them but their `cmd`
@@ -52,7 +52,7 @@ Before reporting a task as finished, run `gofmt` (on `cmd` and `internal`), `go 
 - Pass `context.Context` as the first parameter of anything that does I/O (files, processes, network). Name it `ctx`. Name a Glutter `BuildContext` `bc`
 - Tests are table-driven
 - No global mutable state and no singletons. Package-level read-only values are fine and are never reassigned
-- Prefer the standard library. Allowed dependencies: `github.com/rm4n0s/glutter` (v1.17.11 or newer, only under `internal/gui` and `cmd/cave`), `github.com/rm4n0s/errors`, `golang.org/x/crypto` (`ssh`, `ssh/agent`), `golang.org/x/sys`, `charm.land/bubbletea/v2` and `charm.land/lipgloss/v2` (only under `internal/tui` and `cmd/cave-tui`), and what these bring in. A step that first imports one of them adds it with `go get <module>@<version>`. Ask before adding any other
+- Prefer the standard library. Allowed dependencies: `github.com/rm4n0s/glutter` (v1.17.11 or newer, only under `internal/gui` and `cmd/cave`), `github.com/rm4n0s/errors`, `golang.org/x/crypto` (`ssh`, `ssh/agent`), `golang.org/x/sys`, `charm.land/bubbletea/v2` and `charm.land/lipgloss/v2` (only under `internal/tui` and `cmd/tcave`), and what these bring in. A step that first imports one of them adds it with `go get <module>@<version>`. Ask before adding any other
 - **No cgo**: never write `import "C"`. If a C library is ever needed, ask first
 - Only Glutter's UI thread touches widgets and render objects, and only Bubble Tea's `Update` touches the TUI's model. Other goroutines (the server, sessions, timers) hand work over through `SetState` or the binding's `Post` (desktop) and through a `tea.Msg` (TUI)
 - Long-running work never blocks a UI thread, and takes a `ctx` so it can be cancelled

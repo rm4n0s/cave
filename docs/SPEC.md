@@ -20,7 +20,7 @@ Cave does the job of `sshd` as an application that an ordinary user starts, watc
 | D5 | Besides shell, `exec` and PTY, Cave has the SFTP subsystem, TCP port forwarding (`-L`, `-R`, `-D`) and agent forwarding. No X11 forwarding | the user, 2026-11-24 |
 | D6 | Linux and Windows first, Windows tested under Wine; macOS later | the user, 2026-11-24 |
 | D7 | The login name of a client must be the name of a person in Cave, and the key must be one of that person's | the user, 2026-11-24 |
-| D8 | Two programs, `cave` (desktop) and `cave-tui` (terminal), over one application layer and the same files. One instance at a time per configuration folder | Windows separates GUI and console programs; the TUI must not need a display |
+| D8 | Two programs, `cave` (desktop) and `tcave` (terminal), over one application layer and the same files. One instance at a time per configuration folder | Windows separates GUI and console programs; the TUI must not need a display. The name `tcave`: the user, 2026-11-24 |
 | D9 | Every session runs as the OS user who started Cave, with that user's rights | Cave has no root, so it cannot change user |
 | D10 | Public key authentication only | §7 |
 | D11 | The attempts list is cleared when the setting `attempts.clear` says, or by hand | the user, 2026-11-24 ("put in settings when the list gets cleared") |
@@ -38,7 +38,7 @@ Cave does the job of `sshd` as an application that an ordinary user starts, watc
 ```
 cmd/cave ──► internal/gui ──┐
                             ├──► internal/app ──► internal/core/...
-cmd/cave-tui ► internal/tui ┘
+cmd/tcave ► internal/tui ┘
 ```
 
 ### 4.1 Packages
@@ -46,7 +46,7 @@ cmd/cave-tui ► internal/tui ┘
 | Package | What it is |
 |---|---|
 | `cmd/cave` | `main` of the desktop app: flags, then `gui.Run` |
-| `cmd/cave-tui` | `main` of the TUI: flags, then `tui.Run` |
+| `cmd/tcave` | `main` of the TUI: flags, then `tui.Run` |
 | `internal/app` | The application: owns the stores and the server, gives snapshots, commands and events (§10). Also `version.go` and the flags both programs share |
 | `internal/core/storage` | Folders, atomic writes, the instance lock (§5). `storage/storagetest` isolates tests |
 | `internal/core/clock` | `Clock` (now, timers) and a fake for tests |
@@ -72,7 +72,7 @@ cmd/cave-tui ► internal/tui ┘
 
 1. `internal/core/...` imports nothing of `internal/app`, `internal/gui`, `internal/tui`, Glutter, Bubble Tea or Lip Gloss.
 2. `internal/app` imports the core and no UI library.
-3. `internal/gui` and `internal/tui` never import each other. Glutter appears only under `internal/gui` and `cmd/cave`; Bubble Tea and Lip Gloss only under `internal/tui` and `cmd/cave-tui`.
+3. `internal/gui` and `internal/tui` never import each other. Glutter appears only under `internal/gui` and `cmd/cave`; Bubble Tea and Lip Gloss only under `internal/tui` and `cmd/tcave`.
 4. No file imports the standard library `errors`, and no non-test file calls `fmt.Errorf`.
 5. No file contains `import "C"`.
 6. `ssh.InsecureIgnoreHostKey` appears only in `_test.go` files and in `internal/core/sshtest`.
@@ -114,7 +114,7 @@ Files are written atomically: a temporary file in the same folder with mode `060
 
 ### 5.4 One instance
 
-`cave` and `cave-tui` take an exclusive lock on `<state>/lock` (`flock` on Linux, `LockFileEx` on Windows) and write their PID and program name into it. A second instance on the same folders fails with `AlreadyRunning` and says which program and PID hold it. The lock is released when the process ends, however it ends.
+`cave` and `tcave` take an exclusive lock on `<state>/lock` (`flock` on Linux, `LockFileEx` on Windows) and write their PID and program name into it. A second instance on the same folders fails with `AlreadyRunning` and says which program and PID hold it. The lock is released when the process ends, however it ends.
 
 ## 6. Settings
 
@@ -377,7 +377,7 @@ Every setting of §6 in groups (Server, Attempts list, Sessions, File transfer a
 - Notifications as `notify.*` say.
 - The close button: with `ui.closeToTray` and a tray, the window hides. Otherwise Cave quits, after asking when people are connected ("3 people are connected. Quit and disconnect them?"). The end of the desktop session quits without asking.
 
-## 12. The TUI (`cave-tui`)
+## 12. The TUI (`tcave`)
 
 The same five pages, in the alternate screen, with the mouse off (so the terminal's own selection and copy work).
 
@@ -393,7 +393,7 @@ The same five pages, in the alternate screen, with the mouse off (so the termina
 ## 13. Windows
 
 ### 13.1 General
-The same programs and features, with these differences. `cave.exe` is a GUI program and `cave-tui.exe` a console program. Folders are those of §5.1; files rely on the profile's ACLs (mode bits mean nothing). `server.port` below 1024 works.
+The same programs and features, with these differences. `cave.exe` is a GUI program and `tcave.exe` a console program. Folders are those of §5.1; files rely on the profile's ACLs (mode bits mean nothing). `server.port` below 1024 works.
 
 ### 13.2 Sessions
 - The shell is `session.shell`, else `%ComSpec%`, else `cmd.exe`. `shell` starts it; `exec` starts `<shell> /d /c <command>` with the command passed as written (for a `session.shell` whose name is `powershell.exe` or `pwsh.exe`: `-NoLogo -NoProfile -Command <command>`).
@@ -441,7 +441,7 @@ No test, proof or check touches the user's Cave folders, `~/.ssh`, SSH agent, `~
 ## 16. Versions and builds
 
 - `internal/app/version.go` has `devVersion` (the version being developed, `0.1.0-dev` at first); a release is tagged `vMAJOR.MINOR.PATCH`, and the version printed is the module's version when built from a tag (`runtime/debug.ReadBuildInfo`), else `devVersion`. `--version` prints it.
-- `go build ./cmd/cave ./cmd/cave-tui` builds both. The Windows desktop program is packaged with Glutter's `glutter-windows build` (icon, version, manifest).
+- `go build ./cmd/cave ./cmd/tcave` builds both. The Windows desktop program is packaged with Glutter's `glutter-windows build` (icon, version, manifest).
 
 ## 17. Not in this version
 
@@ -456,7 +456,7 @@ Named so that nobody adds them by accident; each needs a spec change first: pass
 | M2 | Server | Listening, authentication, attempts, connections, sessions with and without a PTY, on Linux |
 | M3 | Subsystems | SFTP, port forwarding, agent forwarding, keepalive |
 | M4 | Application | `internal/app`: one object both UIs drive |
-| M5 | TUI | `cave-tui`, complete |
+| M5 | TUI | `tcave`, complete |
 | M6 | Desktop | `cave`, complete, with tray and notifications |
 | M7 | Windows | Everything on Windows, tested under Wine |
 | M8 | Release | Manual, packaging, the security pass |

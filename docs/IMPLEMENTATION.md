@@ -93,7 +93,7 @@ This file breaks the milestones in `docs/SPEC.md` §18 into small steps. Each st
 | | Method | How |
 |---|---|---|
 | T | Transcript | The verbose output of the named Go tests, saved as text: `scripts/transcript.sh <out.txt> -- go test -v -count=1 -run <pattern> <package>` (step 0.5). It removes temporary paths and timings, so the file is stable |
-| U | TUI capture | `scripts/tui-proof.sh <out.txt> [--config <fixture dir>] [--size 100x30] [--keys '<tmux keys>']... -- <cave-tui args>` (step 5.1): the TUI runs isolated in a private `tmux` server, gets the keys, and the screen is saved as text |
+| U | TUI capture | `scripts/tui-proof.sh <out.txt> [--config <fixture dir>] [--size 100x30] [--keys '<tmux keys>']... -- <tcave args>` (step 5.1): the TUI runs isolated in a private `tmux` server, gets the keys, and the screen is saved as text |
 | G | Golden | A golden file made by a `Golden` test (PNG through Glutter's software renderer, text for the TUI), copied to the proofs folder by the step's command |
 | D | Desktop screenshot | `scripts/proof.sh <out.png> [--config <fixture dir>] [--after <duration>] -- <cave args>` (step 6.1): the desktop app runs isolated in a headless compositor and `grim` saves the screen |
 | W | Wine screenshot | `scripts/wine-proof.sh <out.png> ...` (step 7.5): the same for the Windows program under Wine |
@@ -107,9 +107,9 @@ This file breaks the milestones in `docs/SPEC.md` §18 into small steps. Each st
 **Tasks**
 - `go mod init github.com/rm4n0s/cave` (Go 1.27); add `github.com/rm4n0s/errors`.
 - `internal/app/version.go`: `devVersion` and `Version()` (SPEC §16).
-- `cmd/cave` and `cmd/cave-tui`: a `main` that parses `--version` and prints `cave <version>` / `cave-tui <version>`, and otherwise says that the program is not built yet and exits 1. Each `main` calls a testable `run(args, stdout, stderr) error`.
+- `cmd/cave` and `cmd/tcave`: a `main` that parses `--version` and prints `cave <version>` / `tcave <version>`, and otherwise says that the program is not built yet and exits 1. Each `main` calls a testable `run(args, stdout, stderr) error`.
 - `.golangci.yml` (the linters of Emetos: the standard ones, `revive` with `exported` and `package-comments`, `gofmt`; `testdata` excluded).
-- `.gitignore`: `/cave`, `/cave-tui`, `/dist/`, `.wine-test/`, `*.actual.png`, `*.diff.png`, `*.actual.txt`.
+- `.gitignore`: `/cave`, `/tcave`, `/dist/`, `.wine-test/`, `*.actual.png`, `*.diff.png`, `*.actual.txt`.
 - `scripts/heavy.sh` (two machine-wide slots, `--alone`; lock files named `cave-heavy.*`) and `scripts/checks.sh` (rule 10; a check whose script does not exist yet is skipped with a line that says so).
 **Tests**: `Version()`; `run` of both programs for `--version`, an unknown flag (its Tag and route) and no flag.
 
@@ -262,7 +262,7 @@ This file breaks the milestones in `docs/SPEC.md` §18 into small steps. Each st
 
 ### Step 5.1: The TUI's frame
 **Read**: SPEC §12, §11.1; Bubble Tea v2's `Program`, `Model`, `View`, key and window-size messages, and Lip Gloss v2's styles, in the module cache.
-**Tasks**: add `charm.land/bubbletea/v2` and `charm.land/lipgloss/v2`; `internal/tui`: the root model over the interface it needs of `*app.App`; header, footer, page switching, the help overlay, "Terminal too small", the quit question, `NO_COLOR`; events of the app arrive as messages; the Overview page (state, port, fingerprint, how to connect, counts, the start error, `s`); `tui.Run(ctx, app, in, out)`; `cmd/cave-tui`: flags, `app.Open`, `tui.Run`, errors as sentences on standard error. `scripts/tui-proof.sh` (method U).
+**Tasks**: add `charm.land/bubbletea/v2` and `charm.land/lipgloss/v2`; `internal/tui`: the root model over the interface it needs of `*app.App`; header, footer, page switching, the help overlay, "Terminal too small", the quit question, `NO_COLOR`; events of the app arrive as messages; the Overview page (state, port, fingerprint, how to connect, counts, the start error, `s`); `tui.Run(ctx, app, in, out)`; `cmd/tcave`: flags, `app.Open`, `tui.Run`, errors as sentences on standard error. `scripts/tui-proof.sh` (method U).
 **Tests**: model tests with text goldens at 100×30 and 60×16, in color-less and color profiles: each state of the server, the error state, no people; page keys; the quit question only with connections; too small. A test that the program's output goes nowhere but the TUI's writer.
 **Proof** (U): `5.1-overview.txt` (running, with a fixture of two people), `5.1-help.txt`.
 
@@ -357,8 +357,8 @@ This file breaks the milestones in `docs/SPEC.md` §18 into small steps. Each st
 
 ### Step 7.5: The programs on Windows
 **Read**: SPEC §13.1, §16; Glutter's `cmd/glutter-windows` and `scripts/wine-screenshot.sh`.
-**Tasks**: `scripts/build-windows.sh` (`cave-tui.exe` as a console program; `cave.exe` through `glutter-windows build` with the icon and version); `scripts/wine-proof.sh` (method W); fix what the TUI and the desktop app need on Windows.
-**Tests** (Wine): the TUI model tests; `cave-tui.exe --version`; the desktop app draws its first frame (`cave_wine` tag).
+**Tasks**: `scripts/build-windows.sh` (`tcave.exe` as a console program; `cave.exe` through `glutter-windows build` with the icon and version); `scripts/wine-proof.sh` (method W); fix what the TUI and the desktop app need on Windows.
+**Tests** (Wine): the TUI model tests; `tcave.exe --version`; the desktop app draws its first frame (`cave_wine` tag).
 **Proof** (W): `7.5-windows-overview.png`.
 **Manual check**: on a real Windows PC: ConPTY shell from OpenSSH, the tray, a notification, `ssh -A`.
 
