@@ -402,3 +402,18 @@ func (c *SFTPClient) Write(handle string, offset uint64, data []byte) uint32 {
 	c.t.Helper()
 	return c.Call(SFTPWrite, handle, offset, data).Code()
 }
+
+// Uint64s returns the numbers of an EXTENDED_REPLY answer that is made of 64-bit numbers, as
+// those of statvfs and limits are.
+func (r SFTPReply) Uint64s() []uint64 {
+	r.t.Helper()
+	f := r.want(SFTPExtendedReply)
+	if len(f.b)%8 != 0 {
+		r.t.Fatalf("sshtest: the SFTP answer has %d bytes, not a row of 64-bit numbers", len(f.b))
+	}
+	var out []uint64
+	for len(f.b) > 0 {
+		out = append(out, f.uint64())
+	}
+	return out
+}

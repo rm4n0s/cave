@@ -300,3 +300,155 @@ func TestOpenSSHGit(t *testing.T) {
 		t.Errorf("the repository's history is %q", got.Stdout)
 	}
 }
+
+func TestOpenSSHSFTPBatch(t *testing.T) {
+	f := newOpenSSHFixture(t)
+	local := f.ssh.Dir()
+	data := everyByte(5<<20 + 321)
+	writeFile(t, filepath.Join(local, "up.bin"), data)
+	writeFile(t, filepath.Join(local, "note.txt"), []byte("a note\n"))
+
+	batch := strings.Join([]string{
+		"pwd",
+		"put " + filepath.Join(local, "up.bin") + " stored.bin",
+		"get stored.bin " + filepath.Join(local, "down.bin"),
+		"mkdir docs",
+		"put " + filepath.Join(local, "note.txt") + " docs/note.txt",
+		"rename docs/note.txt docs/renamed.txt",
+		"ln -s renamed.txt docs/link",
+		"ln docs/renamed.txt docs/twin",
+		"chmod 640 docs/renamed.txt",
+		"ls -la docs",
+		"df .",
+		"rm docs/twin",
+		"mkdir gone",
+		"rmdir gone",
+	}, "\n") + "\n"
+	got := f.ssh.SFTP("alice", f.key, batch)
+	if got.ExitCode != 0 {
+		t.Fatalf("sftp: %+v", got)
+	}
+
+	// What sftp printed: where it is, the listing with the server's long names, the room.
+	if !strings.Contains(got.Stdout, "Remote working directory: "+f.Home+"\n") {
+		t.Errorf("pwd did not print the home:\n%s", got.Stdout)
+	}
+	listing := map[string]string{}
+	for _, line := range strings.Split(got.Stdout, "\n") {
+		if fields := strings.Fields(line); len(fields) >= 9 && len(fields[0]) == 10 {
+			listing[fields[len(fields)-1]] = fields[0] + " " + fields[1]
+		}
+	}
+	want := map[string]string{"renamed.txt": "-rw-r----- 2", "twin": "-rw-r----- 2", "link": "lrwxrwxrwx 1"}
+	for name, mode := range want {
+		if listing[name] != mode {
+			t.Errorf("the listing shows %s as %q, want %q:\n%s", name, listing[name], mode, got.Stdout)
+		}
+	}
+	for _, name := range []string{".", ".."} {
+		if !strings.HasPrefix(listing[name], "d") {
+			t.Errorf("the listing has no %s:\n%s", name, got.Stdout)
+		}
+	}
+	if !strings.Contains(got.Stdout, "%Capacity") {
+		t.Errorf("df printed no table:\n%s", got.Stdout)
+	}
+
+	// What is on the disks.
+	sameFile(t, filepath.Join(f.Home, "stored.bin"), data)
+	sameFile(t, filepath.Join(local, "down.bin"), data)
+	sameFile(t, filepath.Join(f.Home, "docs", "renamed.txt"), []byte("a note\n"))
+	sameFile(t, filepath.Join(f.Home, "docs", "link"), []byte("a note\n"))
+	if target, err := os.Readlink(filepath.Join(f.Home, "docs", "link")); err != nil || target != "renamed.txt" {
+		t.Errorf("the link points to %q, %v", target, err)
+	}
+	if info, err := os.Stat(filepath.Join(f.Home, "docs", "renamed.txt")); err != nil || info.Mode().Perm() != 0o640 {
+		t.Errorf("after chmod the file is %v, %v", info, err)
+	}
+	for _, gone := range []string{"docs/note.txt", "docs/twin", "gone"} {
+		if _, err := os.Lstat(filepath.Join(f.Home, gone)); err == nil {
+			t.Errorf("%s is still there", gone)
+		}
+	}
+	t.Logf("%d bytes went up and came back the same; the listing, the link, the mode and the removals are as asked", len(data))
+
+	// A command that fails ends the batch with sftp's error.
+	got = f.ssh.SFTP("alice", f.key, "get missing.bin "+filepath.Join(local, "missing.bin")+"\n")
+	if got.ExitCode == 0 || !strings.Contains(got.Stderr, "not found") {
+		t.Errorf("a missing file: %+v", got)
+	}
+	// A rename onto a name that is taken replaces it: sftp uses the posix-rename extension.
+	writeFile(t, filepath.Join(f.Home, "one"), []byte("one\n"))
+	writeFile(t, filepath.Join(f.Home, "two"), []byte("two\n"))
+	if got = f.ssh.SFTP("alice", f.key, "rename one two\n"); got.ExitCode != 0 {
+		t.Errorf("rename: %+v", got)
+	}
+	sameFile(t, filepath.Join(f.Home, "two"), []byte("one\n"))
+}
+
+func TestOpenSSHSFTPIsRefusedWhenTurnedOff(t *testing.T) {
+	f := newOpenSSHFixture(t)
+	f.Set(string(settings.SFTPEnabled), false)
+	got := f.ssh.SFTP("alice", f.key, "pwd\n")
+	if got.ExitCode == 0 || strings.Contains(got.Stdout, "Remote working directory") {
+		t.Errorf("sftp with sftp.enabled off: %+v", got)
+	}
+	// The person is still let in: ssh works.
+	if got := f.ssh.SSH("", "alice", f.key, nil, "echo in"); got.Stdout != "in\n" {
+		t.Errorf("%+v", got)
+	}
+}
+
+func TestOpenSSHSFTPScp(t *testing.T) {
+	f := newOpenSSHFixture(t)
+	local := f.ssh.Dir()
+	data := everyByte(700000)
+	writeFile(t, filepath.Join(local, "up.bin"), data)
+	writeFile(t, filepath.Join(local, "tree", "a.txt"), []byte("a\n"))
+	writeFile(t, filepath.Join(local, "tree", "sub", "b.txt"), []byte("b\n"))
+	writeFile(t, filepath.Join(local, "tree", "sub", "deep", "c.bin"), data[:70000])
+	when := time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC)
+	if err := os.Chtimes(filepath.Join(local, "up.bin"), when, when); err != nil {
+		t.Fatal(err)
+	}
+
+	// Without "-O", scp speaks SFTP: nothing is run on the other side.
+	steps := []struct {
+		name string
+		args []string
+	}{
+		{"a file up, with its times", []string{"-p", filepath.Join(local, "up.bin"), f.ssh.Remote("alice", "stored.bin")}},
+		{"a file down", []string{f.ssh.Remote("alice", "stored.bin"), filepath.Join(local, "down.bin")}},
+		{"a folder up", []string{"-r", filepath.Join(local, "tree"), f.ssh.Remote("alice", "tree-copy")}},
+		{"a folder down", []string{"-r", f.ssh.Remote("alice", "tree-copy"), filepath.Join(local, "tree-back")}},
+		{"into a folder", []string{filepath.Join(local, "up.bin"), f.ssh.Remote("alice", "tree-copy/")}},
+	}
+	for _, step := range steps {
+		if got := f.ssh.SCP(f.key, step.args...); got.ExitCode != 0 {
+			t.Fatalf("%s: %+v", step.name, got)
+		}
+	}
+	sameFile(t, filepath.Join(f.Home, "stored.bin"), data)
+	sameFile(t, filepath.Join(local, "down.bin"), data)
+	sameFile(t, filepath.Join(f.Home, "tree-copy", "up.bin"), data)
+	for _, name := range []string{"a.txt", "sub/b.txt", "sub/deep/c.bin"} {
+		want, err := os.ReadFile(filepath.Join(local, "tree", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		sameFile(t, filepath.Join(f.Home, "tree-copy", name), want)
+		sameFile(t, filepath.Join(local, "tree-back", name), want)
+	}
+	if info, err := os.Stat(filepath.Join(f.Home, "stored.bin")); err != nil || !info.ModTime().Equal(when) {
+		t.Errorf("the file's time is %v, want %v (%v)", info.ModTime(), when, err)
+	}
+	// No command ran on the server: every session was the sftp subsystem.
+	if log := f.Log.String(); strings.Contains(log, `"kind":"exec"`) || !strings.Contains(log, `"kind":"sftp"`) {
+		t.Errorf("scp did not use the sftp subsystem:\n%s", log)
+	}
+
+	got := f.ssh.SCP(f.key, f.ssh.Remote("alice", "missing.bin"), filepath.Join(local, "missing.bin"))
+	if got.ExitCode == 0 {
+		t.Errorf("a missing file: %+v", got)
+	}
+}

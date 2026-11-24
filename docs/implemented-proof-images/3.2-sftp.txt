@@ -1,0 +1,38 @@
+$ go test -v -count=1 -run OpenSSHSFTP ./internal/core/session
+=== RUN   TestOpenSSHSFTPBatch
+    openssh_linux_test.go:327: $ sftp -b - alice@127.0.0.1  (exit status 0)
+    openssh_linux_test.go:327:     sftp> pwd
+    openssh_linux_test.go:327:     sftp> put <tmp>/up.bin stored.bin
+    openssh_linux_test.go:327:     sftp> get stored.bin <tmp>/down.bin
+    openssh_linux_test.go:327:     sftp> mkdir docs
+    openssh_linux_test.go:327:     sftp> put <tmp>/note.txt docs/note.txt
+    openssh_linux_test.go:327:     sftp> rename docs/note.txt docs/renamed.txt
+    openssh_linux_test.go:327:     sftp> ln -s renamed.txt docs/link
+    openssh_linux_test.go:327:     sftp> ln docs/renamed.txt docs/twin
+    openssh_linux_test.go:327:     sftp> chmod 640 docs/renamed.txt
+    openssh_linux_test.go:327:     sftp> ls -la docs
+    openssh_linux_test.go:327:     sftp> df .
+    openssh_linux_test.go:327:     sftp> rm docs/twin
+    openssh_linux_test.go:327:     sftp> mkdir gone
+    openssh_linux_test.go:327:     sftp> rmdir gone
+    openssh_linux_test.go:373: 5243201 bytes went up and came back the same; the listing, the link, the mode and the removals are as asked
+    openssh_linux_test.go:376: $ sftp -b - alice@127.0.0.1  (exit status 1)
+    openssh_linux_test.go:376:     sftp> get missing.bin <tmp>/missing.bin
+    openssh_linux_test.go:383: $ sftp -b - alice@127.0.0.1  (exit status 0)
+    openssh_linux_test.go:383:     sftp> rename one two
+--- PASS: TestOpenSSHSFTPBatch
+=== RUN   TestOpenSSHSFTPIsRefusedWhenTurnedOff
+    openssh_linux_test.go:392: $ sftp -b - alice@127.0.0.1  (exit status 255)
+    openssh_linux_test.go:392:     sftp> pwd
+    openssh_linux_test.go:397: $ ssh alice@127.0.0.1 echo in  (exit status 0)
+--- PASS: TestOpenSSHSFTPIsRefusedWhenTurnedOff
+=== RUN   TestOpenSSHSFTPScp
+    openssh_linux_test.go:427: $ scp -p <tmp>/up.bin alice@127.0.0.1:stored.bin  (exit status 0)
+    openssh_linux_test.go:427: $ scp alice@127.0.0.1:stored.bin <tmp>/down.bin  (exit status 0)
+    openssh_linux_test.go:427: $ scp -r <tmp>/tree alice@127.0.0.1:tree-copy  (exit status 0)
+    openssh_linux_test.go:427: $ scp -r alice@127.0.0.1:tree-copy <tmp>/tree-back  (exit status 0)
+    openssh_linux_test.go:427: $ scp <tmp>/up.bin alice@127.0.0.1:tree-copy/  (exit status 0)
+    openssh_linux_test.go:450: $ scp alice@127.0.0.1:missing.bin <tmp>/missing.bin  (exit status 1)
+--- PASS: TestOpenSSHSFTPScp
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/session

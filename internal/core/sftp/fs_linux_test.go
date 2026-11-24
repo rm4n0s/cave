@@ -2,10 +2,14 @@ package sftp
 
 import (
 	"bytes"
+	"fmt"
 	"math/rand"
 	"os"
+	"os/user"
 	"path/filepath"
 	"reflect"
+	"sort"
+	"strconv"
 	"syscall"
 	"testing"
 	"time"
@@ -18,6 +22,8 @@ import (
 type linuxSession struct {
 	*testSession
 	home string
+	// fs is the file system the session runs on.
+	fs *linuxFS
 }
 
 // startLinux starts a session whose home folder is a temporary folder of the test. Everything
@@ -33,7 +39,7 @@ func startLinux(t *testing.T) *linuxSession {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &linuxSession{testSession: start(t, fileSystem), home: home}
+	return &linuxSession{testSession: start(t, fileSystem), home: home, fs: fileSystem.(*linuxFS)}
 }
 
 // put writes a file of the test under the home folder.
@@ -689,3 +695,467 @@ func (f fakeInfo) Mode() os.FileMode  { return 0 }
 func (f fakeInfo) ModTime() time.Time { return f.when }
 func (f fakeInfo) IsDir() bool        { return false }
 func (f fakeInfo) Sys() any           { return nil }
+
+// list returns every entry of a folder, by name.
+func (s *linuxSession) list(path string) map[string]sshtest.SFTPEntry {
+	s.t.Helper()
+	dir := s.Call(sshtest.SFTPOpendir, path).Handle()
+	defer s.Close(dir)
+	entries := map[string]sshtest.SFTPEntry{}
+	for {
+		reply := s.Call(sshtest.SFTPReaddir, dir)
+		if reply.Type == sshtest.SFTPStatus {
+			if code := reply.Code(); code != sshtest.SFTPEOF {
+				s.t.Fatalf("readdir: status %d", code)
+			}
+			return entries
+		}
+		for _, entry := range reply.Names() {
+			if _, twice := entries[entry.Name]; twice {
+				s.t.Errorf("the name %q was listed twice", entry.Name)
+			}
+			entries[entry.Name] = entry
+		}
+	}
+}
+
+// me returns the names of the user and the group the tests run as, as a listing shows them.
+func me(t *testing.T) (owner, group string) {
+	t.Helper()
+	owner, group = strconv.Itoa(os.Getuid()), strconv.Itoa(os.Getgid())
+	if u, err := user.LookupId(owner); err == nil {
+		owner = u.Username
+	}
+	if g, err := user.LookupGroupId(group); err == nil {
+		group = g.Name
+	}
+	return owner, group
+}
+
+func TestListAFolder(t *testing.T) {
+	s := startLinux(t)
+	now := time.Date(2026, 11, 24, 12, 0, 0, 0, time.Local)
+	s.fs.now = func() time.Time { return now }
+	recent, old := now.Add(-48*time.Hour), now.AddDate(-2, 0, 0)
+	s.put("dir/file.txt", "12345", 0o640)
+	s.put("dir/.hidden", "", 0o600)
+	s.put("dir/sub/inner", "x", 0o600)
+	if err := os.Symlink("file.txt", filepath.Join(s.home, "dir", "link")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(s.home, "dir", "sub"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	for name, when := range map[string]time.Time{"file.txt": recent, ".hidden": old, "sub": recent} {
+		if err := os.Chtimes(filepath.Join(s.home, "dir", name), when, when); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Chtimes(filepath.Join(s.home, "dir"), recent, recent); err != nil {
+		t.Fatal(err)
+	}
+
+	entries := s.list("dir")
+	var names []string
+	for name := range entries {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	if want := []string{".", "..", ".hidden", "file.txt", "link", "sub"}; !reflect.DeepEqual(names, want) {
+		t.Fatalf("listed %v, want %v", names, want)
+	}
+	owner, group := me(t)
+	want := map[string]string{
+		"file.txt": fmt.Sprintf("-rw-r-----    1 %-8s %-8s        5 %s file.txt", owner, group, recent.Format("Jan _2 15:04")),
+		".hidden":  fmt.Sprintf("-rw-------    1 %-8s %-8s        0 %s .hidden", owner, group, old.Format("Jan _2  2006")),
+	}
+	for name, line := range want {
+		if got := entries[name].LongName; got != line {
+			t.Errorf("the long name of %s:\n got %q\nwant %q", name, got, line)
+		}
+	}
+	// The attributes are those of the name itself: of the link, not of what it points to.
+	if got := entries["file.txt"].Attrs; got.Size != 5 || got.Mode != syscall.S_IFREG|0o640 || got.UID != uint32(os.Getuid()) || got.Mtime != uint32(recent.Unix()) {
+		t.Errorf("the attributes of the file are %+v", got)
+	}
+	if got := entries["link"]; got.Attrs.Mode&syscall.S_IFMT != syscall.S_IFLNK || got.LongName[0] != 'l' {
+		t.Errorf("the link is listed as %+v", got)
+	}
+	if got := entries["sub"]; got.Attrs.Mode != syscall.S_IFDIR|0o750 || got.LongName[:10] != "drwxr-x---" {
+		t.Errorf("the folder is listed as %+v", got)
+	}
+	// "." is the folder and ".." the one above, as OpenSSH lists them.
+	if got := entries["."]; got.Attrs.Mode&syscall.S_IFMT != syscall.S_IFDIR || got.Attrs.Mtime != uint32(recent.Unix()) {
+		t.Errorf(". is listed as %+v", got)
+	}
+	if got := entries[".."]; got.Attrs.Mode&syscall.S_IFMT != syscall.S_IFDIR {
+		t.Errorf(".. is listed as %+v", got)
+	}
+}
+
+func TestListAFolderOfManyFiles(t *testing.T) {
+	s := startLinux(t)
+	want := map[string]bool{".": true, "..": true}
+	for i := 0; i < 250; i++ {
+		name := fmt.Sprintf("file-%03d", i)
+		s.put("many/"+name, "", 0o600)
+		want[name] = true
+	}
+	got := s.list("many")
+	if len(got) != len(want) {
+		t.Errorf("listed %d names, want %d", len(got), len(want))
+	}
+	for name := range want {
+		if _, ok := got[name]; !ok {
+			t.Errorf("%s was not listed", name)
+		}
+	}
+	// An empty folder has the two names every folder has.
+	if err := os.Mkdir(filepath.Join(s.home, "empty"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if got := s.list("empty"); len(got) != 2 {
+		t.Errorf("an empty folder lists %d names", len(got))
+	}
+}
+
+func TestOpendirRefusals(t *testing.T) {
+	notRoot(t)
+	s := startLinux(t)
+	s.put("file", "x", 0o600)
+	if err := os.Mkdir(filepath.Join(s.home, "locked"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	tests := []struct {
+		path        string
+		wantCode    uint32
+		wantMessage string
+	}{
+		{"file", sshtest.SFTPNoSuchFile, "not a directory"},
+		{"missing", sshtest.SFTPNoSuchFile, "no such file or directory"},
+		{"locked", sshtest.SFTPPermissionDenied, "permission denied"},
+	}
+	for _, tt := range tests {
+		if code, message := s.status(sshtest.SFTPOpendir, tt.path); code != tt.wantCode || message != tt.wantMessage {
+			t.Errorf("opendir %q: %d %q, want %d %q", tt.path, code, message, tt.wantCode, tt.wantMessage)
+		}
+	}
+}
+
+func TestMkdirAndRmdir(t *testing.T) {
+	s := startLinux(t)
+	umask := unix.Umask(0o022)
+	t.Cleanup(func() { unix.Umask(umask) })
+	s.put("file", "x", 0o600)
+	s.put("full/inner", "x", 0o600)
+	steps := []struct {
+		name        string
+		kind        byte
+		fields      []any
+		wantCode    uint32
+		wantMessage string
+	}{
+		{"mkdir", sshtest.SFTPMkdir, []any{"new", sshtest.SFTPAttrs{}}, sshtest.SFTPOK, "Success"},
+		{"mkdir with a mode", sshtest.SFTPMkdir, []any{"private", sshtest.SFTPAttrs{Flags: sshtest.SFTPAttrPermissions, Mode: syscall.S_IFDIR | 0o700}}, sshtest.SFTPOK, "Success"},
+		{"mkdir of a name that is taken", sshtest.SFTPMkdir, []any{"new", sshtest.SFTPAttrs{}}, sshtest.SFTPFailure, "file exists"},
+		{"mkdir over a file", sshtest.SFTPMkdir, []any{"file", sshtest.SFTPAttrs{}}, sshtest.SFTPFailure, "file exists"},
+		{"mkdir in a folder that is not there", sshtest.SFTPMkdir, []any{"nowhere/new", sshtest.SFTPAttrs{}}, sshtest.SFTPNoSuchFile, "no such file or directory"},
+		{"rmdir of a folder that is not empty", sshtest.SFTPRmdir, []any{"full"}, sshtest.SFTPFailure, "directory not empty"},
+		{"rmdir of a file", sshtest.SFTPRmdir, []any{"file"}, sshtest.SFTPNoSuchFile, "not a directory"},
+		{"rmdir of nothing", sshtest.SFTPRmdir, []any{"missing"}, sshtest.SFTPNoSuchFile, "no such file or directory"},
+		{"rmdir", sshtest.SFTPRmdir, []any{"new"}, sshtest.SFTPOK, "Success"},
+		{"remove of a folder is not rmdir", sshtest.SFTPRemove, []any{"private"}, sshtest.SFTPFailure, "is a directory"},
+	}
+	modes := map[string]os.FileMode{}
+	for _, step := range steps {
+		code, message := s.Call(step.kind, step.fields...).Status()
+		if code != step.wantCode || message != step.wantMessage {
+			t.Errorf("%s: %d %q, want %d %q", step.name, code, message, step.wantCode, step.wantMessage)
+		}
+		for _, name := range []string{"new", "private"} {
+			if info, err := os.Stat(filepath.Join(s.home, name)); err == nil && info.IsDir() {
+				modes[name] = info.Mode().Perm()
+			}
+		}
+	}
+	if modes["new"] != 0o755 || modes["private"] != 0o700 {
+		t.Errorf("the folders were made with the modes %v", modes)
+	}
+	for name, want := range map[string]bool{"new": false, "private": true, "full/inner": true, "file": true} {
+		if _, err := os.Stat(filepath.Join(s.home, name)); (err == nil) != want {
+			t.Errorf("%s is there: %v, want %v", name, err == nil, want)
+		}
+	}
+}
+
+func TestRename(t *testing.T) {
+	for name, noReplace := range map[string]func(oldPath, newPath string) error{
+		"in one step": nil,
+		// A file system that cannot rename without replacing: Cave looks first, then renames.
+		"on a file system without it":  func(string, string) error { return unix.EINVAL },
+		"on a system that has not got": func(string, string) error { return unix.ENOSYS },
+	} {
+		t.Run(name, func(t *testing.T) {
+			s := startLinux(t)
+			if noReplace != nil {
+				s.fs.renameNoReplace = noReplace
+			}
+			s.put("a", "content of a", 0o600)
+			s.put("taken", "content of taken", 0o600)
+			s.put("dir/inner", "x", 0o600)
+			s.put("other/inner", "y", 0o600)
+			if err := os.Symlink("a", filepath.Join(s.home, "link")); err != nil {
+				t.Fatal(err)
+			}
+			steps := []struct {
+				name        string
+				from, to    string
+				wantCode    uint32
+				wantMessage string
+			}{
+				{"onto a file that is there", "a", "taken", sshtest.SFTPFailure, "file exists"},
+				{"a folder onto a folder that is there", "dir", "other", sshtest.SFTPFailure, "file exists"},
+				{"onto itself", "a", "a", sshtest.SFTPFailure, "file exists"},
+				{"a file that is not there", "missing", "b", sshtest.SFTPNoSuchFile, "no such file or directory"},
+				{"into a folder that is not there", "a", "nowhere/b", sshtest.SFTPNoSuchFile, "no such file or directory"},
+				{"a file", "a", "b", sshtest.SFTPOK, "Success"},
+				{"a folder", "dir", "moved", sshtest.SFTPOK, "Success"},
+				{"a link, not what it points to", "link", "link2", sshtest.SFTPOK, "Success"},
+				{"into another folder", "b", "moved/b", sshtest.SFTPOK, "Success"},
+			}
+			for _, step := range steps {
+				if code, message := s.Call(sshtest.SFTPRename, step.from, step.to).Status(); code != step.wantCode || message != step.wantMessage {
+					t.Errorf("%s: %d %q, want %d %q", step.name, code, message, step.wantCode, step.wantMessage)
+				}
+			}
+			if got := s.content("taken"); got != "content of taken" {
+				t.Errorf("the file whose name was asked for has %q", got)
+			}
+			if got := s.content("moved/b"); got != "content of a" {
+				t.Errorf("the renamed file has %q", got)
+			}
+			if got := s.content("moved/inner") + s.content("other/inner"); got != "xy" {
+				t.Errorf("the folders have %q", got)
+			}
+			if target, err := os.Readlink(filepath.Join(s.home, "link2")); err != nil || target != "a" {
+				t.Errorf("the renamed link points to %q, %v", target, err)
+			}
+			for _, gone := range []string{"a", "b", "dir", "link"} {
+				if _, err := os.Lstat(filepath.Join(s.home, gone)); err == nil {
+					t.Errorf("%s is still there", gone)
+				}
+			}
+		})
+	}
+}
+
+func TestRenameWhenTheNewNameCannotBeLookedAt(t *testing.T) {
+	notRoot(t)
+	s := startLinux(t)
+	s.fs.renameNoReplace = func(string, string) error { return unix.EINVAL }
+	s.put("a", "x", 0o600)
+	if err := os.Mkdir(filepath.Join(s.home, "locked"), 0o000); err != nil {
+		t.Fatal(err)
+	}
+	// Whether the name is taken cannot be seen: the rename is refused, not tried.
+	if code, message := s.status(sshtest.SFTPRename, "a", "locked/b"); code != sshtest.SFTPPermissionDenied || message != "permission denied" {
+		t.Errorf("rename: %d %q", code, message)
+	}
+	if got := s.content("a"); got != "x" {
+		t.Errorf("the file has %q", got)
+	}
+}
+
+func TestPosixRenameReplaces(t *testing.T) {
+	s := startLinux(t)
+	s.put("a", "content of a", 0o600)
+	s.put("taken", "content of taken", 0o600)
+	rename := func(from, to string) (uint32, string) {
+		return s.Call(sshtest.SFTPExtended, "posix-rename@openssh.com", from, to).Status()
+	}
+	if code, message := rename("a", "taken"); code != sshtest.SFTPOK {
+		t.Errorf("posix-rename: %d %q", code, message)
+	}
+	if got := s.content("taken"); got != "content of a" {
+		t.Errorf("the file has %q", got)
+	}
+	if _, err := os.Lstat(filepath.Join(s.home, "a")); err == nil {
+		t.Error("the old name is still there")
+	}
+	if code, message := rename("missing", "b"); code != sshtest.SFTPNoSuchFile || message != "no such file or directory" {
+		t.Errorf("posix-rename of nothing: %d %q", code, message)
+	}
+}
+
+func TestSymlinkAndReadlink(t *testing.T) {
+	s := startLinux(t)
+	s.put("file", "content", 0o600)
+	steps := []struct {
+		name         string
+		target, link string
+		wantCode     uint32
+		wantMessage  string
+	}{
+		// What the link points to comes first, and is kept as it is written.
+		{"a link to a file", "file", "link", sshtest.SFTPOK, "Success"},
+		{"a link to nothing", "../nowhere/at all", "dangling", sshtest.SFTPOK, "Success"},
+		{"a link with an absolute target", "/etc/hostname", "absolute", sshtest.SFTPOK, "Success"},
+		{"a name that is taken", "file", "link", sshtest.SFTPFailure, "file exists"},
+		{"in a folder that is not there", "file", "nowhere/link", sshtest.SFTPNoSuchFile, "no such file or directory"},
+	}
+	for _, step := range steps {
+		if code, message := s.Call(sshtest.SFTPSymlink, step.target, step.link).Status(); code != step.wantCode || message != step.wantMessage {
+			t.Errorf("%s: %d %q, want %d %q", step.name, code, message, step.wantCode, step.wantMessage)
+		}
+	}
+	if got := s.content("link"); got != "content" {
+		t.Errorf("through the link the file has %q", got)
+	}
+	for link, want := range map[string]string{"link": "file", "dangling": "../nowhere/at all", "absolute": "/etc/hostname"} {
+		if target, err := os.Readlink(filepath.Join(s.home, link)); err != nil || target != want {
+			t.Errorf("%s points to %q, %v", link, target, err)
+		}
+		names := s.Call(sshtest.SFTPReadlink, link).Names()
+		if len(names) != 1 || names[0].Name != want || names[0].LongName != want || names[0].Attrs.Flags != 0 {
+			t.Errorf("readlink %s = %+v", link, names)
+		}
+	}
+	if code, message := s.status(sshtest.SFTPReadlink, "file"); code != sshtest.SFTPFailure || message != "invalid argument" {
+		t.Errorf("readlink of a file: %d %q", code, message)
+	}
+	if code, message := s.status(sshtest.SFTPReadlink, "missing"); code != sshtest.SFTPNoSuchFile || message != "no such file or directory" {
+		t.Errorf("readlink of nothing: %d %q", code, message)
+	}
+}
+
+func TestHardlink(t *testing.T) {
+	s := startLinux(t)
+	full := s.put("file", "content", 0o600)
+	s.put("taken", "x", 0o600)
+	if err := os.Mkdir(filepath.Join(s.home, "dir"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	link := func(from, to string) (uint32, string) {
+		return s.Call(sshtest.SFTPExtended, "hardlink@openssh.com", from, to).Status()
+	}
+	if code, message := link("file", "twin"); code != sshtest.SFTPOK {
+		t.Fatalf("hardlink: %d %q", code, message)
+	}
+	first, err := os.Stat(full)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := os.Stat(filepath.Join(s.home, "twin"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !os.SameFile(first, second) || first.Sys().(*syscall.Stat_t).Nlink != 2 {
+		t.Error("the new name is not the same file")
+	}
+	tests := []struct {
+		from, to    string
+		wantCode    uint32
+		wantMessage string
+	}{
+		{"file", "taken", sshtest.SFTPFailure, "file exists"},
+		{"missing", "other", sshtest.SFTPNoSuchFile, "no such file or directory"},
+		{"dir", "dir2", sshtest.SFTPPermissionDenied, "operation not permitted"},
+	}
+	for _, tt := range tests {
+		if code, message := link(tt.from, tt.to); code != tt.wantCode || message != tt.wantMessage {
+			t.Errorf("hardlink %s %s: %d %q, want %d %q", tt.from, tt.to, code, message, tt.wantCode, tt.wantMessage)
+		}
+	}
+}
+
+func TestFsyncAndStatvfs(t *testing.T) {
+	s := startLinux(t)
+	s.put("file", "content", 0o600)
+	handle := s.Open("file", read|write, sshtest.SFTPAttrs{})
+	if code, message := s.Call(sshtest.SFTPExtended, "fsync@openssh.com", handle).Status(); code != sshtest.SFTPOK {
+		t.Errorf("fsync: %d %q", code, message)
+	}
+
+	var stat unix.Statfs_t
+	if err := unix.Statfs(s.home, &stat); err != nil {
+		t.Fatal(err)
+	}
+	// What does not change while the test runs: the sizes, the totals, the id, the longest name.
+	check := func(name string, got []uint64) {
+		t.Helper()
+		if len(got) != 11 {
+			t.Fatalf("%s answered %d numbers, want 11", name, len(got))
+		}
+		if got[0] != uint64(stat.Bsize) || got[1] == 0 || got[2] != stat.Blocks || got[5] != stat.Files || got[10] != uint64(stat.Namelen) {
+			t.Errorf("%s = %v, the system says %+v", name, got, stat)
+		}
+		if got[3] > got[2] || got[4] > got[3] || got[7] != got[6] || got[9]&^3 != 0 {
+			t.Errorf("%s = %v", name, got)
+		}
+	}
+	check("statvfs", s.Call(sshtest.SFTPExtended, "statvfs@openssh.com", ".").Uint64s())
+	check("fstatvfs", s.Call(sshtest.SFTPExtended, "fstatvfs@openssh.com", handle).Uint64s())
+	if code, message := s.Call(sshtest.SFTPExtended, "statvfs@openssh.com", "missing").Status(); code != sshtest.SFTPNoSuchFile || message != "no such file or directory" {
+		t.Errorf("statvfs of nothing: %d %q", code, message)
+	}
+	s.Close(handle)
+}
+
+func TestVFSOf(t *testing.T) {
+	stat := &unix.Statfs_t{Bsize: 4096, Frsize: 0, Blocks: 100, Bfree: 60, Bavail: 50, Files: 10, Ffree: 4, Namelen: 255, Flags: 1 | 2 | 1024}
+	stat.Fsid.Val = [2]int32{-1, 2}
+	want := VFS{
+		BlockSize: 4096, FragmentSize: 4096, Blocks: 100, BlocksFree: 60, BlocksAvail: 50, Files: 10, FilesFree: 4, FilesAvail: 4,
+		FSID: 0xffffffff | 2<<32, Flags: VFSReadOnly | VFSNoSUID, NameMax: 255,
+	}
+	if got := vfsOf(stat); got != want {
+		t.Errorf("vfsOf = %+v, want %+v", got, want)
+	}
+	stat.Frsize = 512
+	if got := vfsOf(stat); got.FragmentSize != 512 {
+		t.Errorf("the fragment size is %d", got.FragmentSize)
+	}
+}
+
+func TestTheNamesOfUsersAndGroups(t *testing.T) {
+	fileSystem, err := NewFileSystem("/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	l := fileSystem.(*linuxFS)
+	asked := 0
+	lookup := func(id string) (string, error) {
+		asked++
+		if id == "7" {
+			return "seven", nil
+		}
+		return "", os.ErrNotExist
+	}
+	cache := map[uint32]string{}
+	// A name is asked for once; an id without a name is shown as its number.
+	for i := 0; i < 3; i++ {
+		if got := l.name(cache, 7, lookup); got != "seven" {
+			t.Errorf("the name of 7 is %q", got)
+		}
+		if got := l.name(cache, 4000000000, lookup); got != "4000000000" {
+			t.Errorf("the name of an id nobody has is %q", got)
+		}
+	}
+	if asked != 2 {
+		t.Errorf("the system was asked %d times, want 2", asked)
+	}
+	// The real lookups: the user the tests run as, and an id nobody has.
+	owner, group := me(t)
+	if got := l.name(l.owners, uint32(os.Getuid()), userName); got != owner {
+		t.Errorf("the user is %q, want %q", got, owner)
+	}
+	if got := l.name(l.groups, uint32(os.Getgid()), groupName); got != group {
+		t.Errorf("the group is %q, want %q", got, group)
+	}
+	if got := l.name(l.owners, 4000000001, userName); got != "4000000001" {
+		t.Errorf("a user nobody has is %q", got)
+	}
+	if got := l.name(l.groups, 4000000001, groupName); got != "4000000001" {
+		t.Errorf("a group nobody has is %q", got)
+	}
+}

@@ -5,8 +5,11 @@ import (
 	"io/fs"
 	"math"
 	"os"
+	"os/user"
 	"path/filepath"
+	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -17,6 +20,14 @@ import (
 // linuxFS is the whole file system, as the OS user sees it, starting in the home folder.
 type linuxFS struct {
 	home string
+	// now is the time, for the long names of a listing.
+	now func() time.Time
+	// renameNoReplace renames a file unless the new name is taken, in one step of the system.
+	renameNoReplace func(oldPath, newPath string) error
+
+	// owners and groups are the names of the users and groups that listings have shown.
+	mu             sync.Mutex
+	owners, groups map[uint32]string
 }
 
 // NewFileSystem returns the file system of this computer for SFTP sessions: every path the OS
@@ -25,7 +36,12 @@ func NewFileSystem(home string) (FileSystem, error) {
 	if !filepath.IsAbs(home) {
 		home = "/"
 	}
-	return &linuxFS{home: home}, nil
+	return &linuxFS{
+		home: home, now: time.Now, owners: map[uint32]string{}, groups: map[uint32]string{},
+		renameNoReplace: func(oldPath, newPath string) error {
+			return unix.Renameat2(unix.AT_FDCWD, oldPath, unix.AT_FDCWD, newPath, unix.RENAME_NOREPLACE)
+		},
+	}, nil
 }
 
 // statusOf turns an error of the system into the status a client is told, with the system's own
@@ -232,6 +248,175 @@ func (l *linuxFS) RealPath(path string) (string, Status) {
 	return filepath.Join(parent, last), Status{}
 }
 
+func (l *linuxFS) OpenDir(path string) (Dir, Status) {
+	full := l.resolve(path)
+	file, err := os.OpenFile(full, os.O_RDONLY|unix.O_DIRECTORY|unix.O_NONBLOCK|unix.O_NOCTTY, 0)
+	if err != nil {
+		return nil, statusOf(err)
+	}
+	return &linuxDir{fs: l, file: file, path: full}, Status{}
+}
+
+func (l *linuxFS) Mkdir(path string, attrs Attrs) Status {
+	perm := os.FileMode(0o777)
+	if attrs.Flags&AttrPermissions != 0 {
+		perm = fileMode(attrs.Mode)
+	}
+	return statusOf(os.Mkdir(l.resolve(path), perm))
+}
+
+func (l *linuxFS) Rmdir(path string) Status {
+	// rmdir, not os.Remove: a file is removed with its own request.
+	return statusOf(unix.Rmdir(l.resolve(path)))
+}
+
+func (l *linuxFS) Rename(oldPath, newPath string, replace bool) Status {
+	from, to := l.resolve(oldPath), l.resolve(newPath)
+	if replace {
+		return statusOf(os.Rename(from, to))
+	}
+	err := l.renameNoReplace(from, to)
+	if err != unix.EINVAL && err != unix.ENOSYS {
+		return statusOf(err)
+	}
+	// The file system cannot do it in one step: look first, then rename. Another program may
+	// take the name in between; OpenSSH has the same gap.
+	if _, statErr := os.Lstat(to); statErr == nil {
+		return statusOf(syscall.EEXIST)
+	} else if !errors.Is(statErr, fs.ErrNotExist) {
+		return statusOf(statErr)
+	}
+	return statusOf(os.Rename(from, to))
+}
+
+func (l *linuxFS) ReadLink(path string) (string, Status) {
+	target, err := os.Readlink(l.resolve(path))
+	return target, statusOf(err)
+}
+
+func (l *linuxFS) Symlink(target, linkPath string) Status {
+	return statusOf(os.Symlink(target, l.resolve(linkPath)))
+}
+
+func (l *linuxFS) Link(oldPath, newPath string) Status {
+	return statusOf(os.Link(l.resolve(oldPath), l.resolve(newPath)))
+}
+
+func (l *linuxFS) StatVFS(path string) (VFS, Status) {
+	var stat unix.Statfs_t
+	if err := unix.Statfs(l.resolve(path), &stat); err != nil {
+		return VFS{}, statusOf(err)
+	}
+	return vfsOf(&stat), Status{}
+}
+
+// vfsOf turns what the system says about a file system into what statvfs answers.
+func vfsOf(stat *unix.Statfs_t) VFS {
+	fragment := uint64(stat.Frsize)
+	if fragment == 0 {
+		fragment = uint64(stat.Bsize)
+	}
+	return VFS{
+		BlockSize: uint64(stat.Bsize), FragmentSize: fragment,
+		Blocks: stat.Blocks, BlocksFree: stat.Bfree, BlocksAvail: stat.Bavail,
+		Files: stat.Files, FilesFree: stat.Ffree, FilesAvail: stat.Ffree,
+		FSID:    uint64(uint32(stat.Fsid.Val[0])) | uint64(uint32(stat.Fsid.Val[1]))<<32,
+		Flags:   uint64(stat.Flags) & (VFSReadOnly | VFSNoSUID),
+		NameMax: uint64(stat.Namelen),
+	}
+}
+
+// name returns the name of a user or a group for a listing: from the cache, else from lookup,
+// else the number.
+func (l *linuxFS) name(cache map[uint32]string, id uint32, lookup func(id string) (string, error)) string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	if name, ok := cache[id]; ok {
+		return name
+	}
+	number := strconv.FormatUint(uint64(id), 10)
+	name, err := lookup(number)
+	if err != nil || name == "" {
+		name = number // a user or a group the system has no name for
+	}
+	cache[id] = name
+	return name
+}
+
+// userName and groupName ask the system for the name of an id.
+func userName(id string) (string, error) {
+	u, err := user.LookupId(id)
+	if err != nil {
+		return "", err
+	}
+	return u.Username, nil
+}
+
+func groupName(id string) (string, error) {
+	g, err := user.LookupGroupId(id)
+	if err != nil {
+		return "", err
+	}
+	return g.Name, nil
+}
+
+// entry is one name of a listing, with its long name.
+func (l *linuxFS) entry(name string, info os.FileInfo) Entry {
+	attrs := attrsOf(info)
+	links, owner, group := uint64(1), "?", "?"
+	if stat, ok := info.Sys().(*syscall.Stat_t); ok {
+		links = uint64(stat.Nlink)
+		owner, group = l.name(l.owners, stat.Uid, userName), l.name(l.groups, stat.Gid, groupName)
+	}
+	return Entry{Name: name, Attrs: attrs, LongName: longName(name, attrs.Mode, links, owner, group, attrs.Size, info.ModTime(), l.now())}
+}
+
+// linuxDir is an open folder.
+type linuxDir struct {
+	fs   *linuxFS
+	file *os.File
+	path string
+	// dots says that "." and ".." were handed out.
+	dots bool
+}
+
+func (d *linuxDir) Read(max int) ([]Entry, Status) {
+	var entries []Entry
+	if !d.dots {
+		// The system's listing leaves them out; OpenSSH's has them, and clients expect them.
+		d.dots = true
+		for _, name := range []string{".", ".."} {
+			if info, err := os.Lstat(d.path + "/" + name); err == nil {
+				entries = append(entries, d.fs.entry(name, info))
+			}
+		}
+	}
+	for len(entries) < max {
+		items, err := d.file.ReadDir(max - len(entries))
+		for _, item := range items {
+			info, infoErr := item.Info()
+			if infoErr != nil {
+				continue // removed since it was listed
+			}
+			entries = append(entries, d.fs.entry(item.Name(), info))
+		}
+		if err == io.EOF || len(items) == 0 && err == nil {
+			break
+		}
+		if err != nil {
+			if len(entries) == 0 {
+				return nil, statusOf(err)
+			}
+			break // what was read is told first; the next read meets the error again
+		}
+	}
+	return entries, Status{}
+}
+
+func (d *linuxDir) Close() Status {
+	return statusOf(d.file.Close())
+}
+
 // linuxFile is an open file.
 type linuxFile struct {
 	file *os.File
@@ -288,6 +473,26 @@ func (f *linuxFile) chtimes(atime, mtime time.Time) error {
 		return err
 	}
 	return result
+}
+
+func (f *linuxFile) Sync() Status {
+	return statusOf(f.file.Sync())
+}
+
+func (f *linuxFile) StatVFS() (VFS, Status) {
+	conn, err := f.file.SyscallConn()
+	if err != nil {
+		return VFS{}, statusOf(err)
+	}
+	var stat unix.Statfs_t
+	var result error
+	if err := conn.Control(func(fd uintptr) { result = unix.Fstatfs(int(fd), &stat) }); err != nil {
+		return VFS{}, statusOf(err)
+	}
+	if result != nil {
+		return VFS{}, statusOf(result)
+	}
+	return vfsOf(&stat), Status{}
 }
 
 func (f *linuxFile) Close() Status {

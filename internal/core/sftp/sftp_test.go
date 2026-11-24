@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log/slog"
 	"math/rand"
 	"path"
 	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -139,6 +141,7 @@ type memFS struct {
 	files   map[string]*memData
 	open    int
 	maxRead int
+	synced  int
 }
 
 type memData struct {
@@ -254,6 +257,105 @@ func (m *memFS) RealPath(name string) (string, Status) {
 	return path.Join("/home/tester", name), Status{}
 }
 
+// memDir lists the files of a memFS whose path begins with the folder's.
+type memDir struct {
+	fs      *memFS
+	entries []Entry
+	closed  bool
+}
+
+func (m *memFS) OpenDir(name string) (Dir, Status) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if strings.HasPrefix(name, "/forbidden") {
+		return nil, Status{Code: StatusPermissionDenied}
+	}
+	prefix := strings.TrimSuffix(name, "/") + "/"
+	var names []string
+	for file := range m.files {
+		if strings.HasPrefix(file, prefix) {
+			names = append(names, strings.TrimPrefix(file, prefix))
+		}
+	}
+	if len(names) == 0 {
+		return nil, Status{Code: StatusNoSuchFile}
+	}
+	sort.Strings(names)
+	dir := &memDir{fs: m}
+	for _, file := range names {
+		dir.entries = append(dir.entries, Entry{Name: file, LongName: "long " + file, Attrs: Attrs{Flags: AttrSize, Size: uint64(len(m.files[prefix+file].data))}})
+	}
+	m.open++
+	return dir, Status{}
+}
+
+func (d *memDir) Read(limit int) ([]Entry, Status) {
+	n := min(limit, len(d.entries))
+	out := d.entries[:n]
+	d.entries = d.entries[n:]
+	return out, Status{}
+}
+
+func (d *memDir) Close() Status {
+	d.fs.mu.Lock()
+	defer d.fs.mu.Unlock()
+	if !d.closed {
+		d.closed = true
+		d.fs.open--
+	}
+	return Status{}
+}
+
+// The requests a file system in memory has no use for are refused, each in its own words, so
+// that a test sees which one was asked.
+func (m *memFS) Mkdir(name string, attrs Attrs) Status {
+	return Status{Code: StatusFailure, Message: fmt.Sprintf("mkdir %s %o", name, attrs.Mode)}
+}
+
+func (m *memFS) Rmdir(name string) Status {
+	return Status{Code: StatusFailure, Message: "rmdir " + name}
+}
+
+func (m *memFS) Rename(oldPath, newPath string, replace bool) Status {
+	return Status{Code: StatusFailure, Message: fmt.Sprintf("rename %s %s %v", oldPath, newPath, replace)}
+}
+
+func (m *memFS) ReadLink(name string) (string, Status) {
+	if name == "/link" {
+		return "where/it/points", Status{}
+	}
+	return "", Status{Code: StatusNoSuchFile}
+}
+
+func (m *memFS) Symlink(target, linkPath string) Status {
+	return Status{Code: StatusFailure, Message: fmt.Sprintf("symlink %s -> %s", linkPath, target)}
+}
+
+func (m *memFS) Link(oldPath, newPath string) Status {
+	return Status{Code: StatusFailure, Message: fmt.Sprintf("link %s %s", oldPath, newPath)}
+}
+
+// memVFS is what the file system in memory says about its room.
+var memVFS = VFS{BlockSize: 1, FragmentSize: 2, Blocks: 3, BlocksFree: 4, BlocksAvail: 5, Files: 6, FilesFree: 7, FilesAvail: 8, FSID: 9, Flags: VFSNoSUID, NameMax: 255}
+
+func (m *memFS) StatVFS(name string) (VFS, Status) {
+	if _, ok := m.content(name); !ok {
+		return VFS{}, Status{Code: StatusNoSuchFile}
+	}
+	return memVFS, Status{}
+}
+
+func (f *memFile) Sync() Status {
+	f.fs.mu.Lock()
+	defer f.fs.mu.Unlock()
+	f.fs.synced++
+	return Status{}
+}
+
+func (f *memFile) StatVFS() (VFS, Status) {
+	return memVFS, Status{}
+}
+
 type memFile struct {
 	fs     *memFS
 	file   *memData
@@ -335,9 +437,9 @@ func TestInit(t *testing.T) {
 func TestTheVersionListsTheExtensions(t *testing.T) {
 	s := serve(t, newMemFS())
 	_, got := s.Init()
-	want := map[string]string{}
-	for _, extension := range extensions {
-		want[extension.name] = extension.version
+	want := map[string]string{
+		"posix-rename@openssh.com": "1", "statvfs@openssh.com": "2", "fstatvfs@openssh.com": "2",
+		"hardlink@openssh.com": "1", "fsync@openssh.com": "1", "limits@openssh.com": "1",
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("the extensions are %v, want %v", got, want)
@@ -782,7 +884,7 @@ func TestRandomPacketsNeverBreakTheServer(t *testing.T) {
 func TestTheSessionsBuffersStayWithinTheLimit(t *testing.T) {
 	fs := newMemFS()
 	fs.put("/a", strings.Repeat("x", 1000))
-	c := &conn{s: New(Options{FS: fs, Logger: slog.New(slog.NewJSONHandler(io.Discard, nil))}), handles: map[string]File{}}
+	c := &conn{s: New(Options{FS: fs, Logger: slog.New(slog.NewJSONHandler(io.Discard, nil))}), handles: map[string]*handle{}}
 	var input bytes.Buffer
 	packet := func(kind byte, body []byte) {
 		input.Write(binary.BigEndian.AppendUint32(nil, uint32(len(body)+1)))
@@ -857,5 +959,318 @@ func TestTheReader(t *testing.T) {
 	r = &reader{b: []byte{0, 0, 0, 0}}
 	if got := r.bytes(); len(got) != 0 || r.bad {
 		t.Errorf("read %v, bad %v", got, r.bad)
+	}
+}
+
+func TestFoldersOnAFileSystemInMemory(t *testing.T) {
+	fs := newMemFS()
+	fs.put("/docs/a", "1")
+	fs.put("/docs/b", "22")
+	fs.put("/other", "x")
+	s := start(t, fs)
+
+	dir := s.Call(sshtest.SFTPOpendir, "/docs").Handle()
+	names := s.Call(sshtest.SFTPReaddir, dir).Names()
+	want := []sshtest.SFTPEntry{
+		{Name: "a", LongName: "long a", Attrs: sshtest.SFTPAttrs{Flags: sshtest.SFTPAttrSize, Size: 1}},
+		{Name: "b", LongName: "long b", Attrs: sshtest.SFTPAttrs{Flags: sshtest.SFTPAttrSize, Size: 2}},
+	}
+	if !reflect.DeepEqual(names, want) {
+		t.Errorf("readdir = %+v, want %+v", names, want)
+	}
+	// After the last name, and again after that: the end.
+	for i := 0; i < 2; i++ {
+		if code := s.Call(sshtest.SFTPReaddir, dir).Code(); code != sshtest.SFTPEOF {
+			t.Errorf("readdir at the end: status %d", code)
+		}
+	}
+
+	// The handle of a folder is not the handle of a file, and the other way round.
+	file := s.Open("/other", sshtest.SFTPOpenRead, sshtest.SFTPAttrs{})
+	misuses := []struct {
+		name   string
+		kind   byte
+		fields []any
+	}{
+		{"read a folder", sshtest.SFTPRead, []any{dir, uint64(0), uint32(10)}},
+		{"write a folder", sshtest.SFTPWrite, []any{dir, uint64(0), "x"}},
+		{"fstat a folder", sshtest.SFTPFstat, []any{dir}},
+		{"fsetstat a folder", sshtest.SFTPFsetstat, []any{dir, sshtest.SFTPAttrs{}}},
+		{"fsync a folder", sshtest.SFTPExtended, []any{"fsync@openssh.com", dir}},
+		{"fstatvfs a folder", sshtest.SFTPExtended, []any{"fstatvfs@openssh.com", dir}},
+		{"list a file", sshtest.SFTPReaddir, []any{file}},
+		{"list a handle that is not open", sshtest.SFTPReaddir, []any{"nonsense"}},
+		{"fsync a handle that is not open", sshtest.SFTPExtended, []any{"fsync@openssh.com", "nonsense"}},
+		{"fstatvfs a handle that is not open", sshtest.SFTPExtended, []any{"fstatvfs@openssh.com", "nonsense"}},
+	}
+	for _, tt := range misuses {
+		if code, message := s.Call(tt.kind, tt.fields...).Status(); code != sshtest.SFTPFailure || message != "invalid handle" {
+			t.Errorf("%s: %d %q", tt.name, code, message)
+		}
+	}
+	if fs.opened() != 2 {
+		t.Errorf("%d files and folders are open, want 2", fs.opened())
+	}
+	s.Close(dir)
+	s.Close(file)
+	if fs.opened() != 0 {
+		t.Errorf("%d files and folders are open after their close", fs.opened())
+	}
+	if code := s.Call(sshtest.SFTPReaddir, dir).Code(); code != sshtest.SFTPFailure {
+		t.Errorf("readdir on a closed handle: status %d", code)
+	}
+
+	for path, want := range map[string]uint32{"/nowhere": sshtest.SFTPNoSuchFile, "/forbidden": sshtest.SFTPPermissionDenied} {
+		if code := s.Call(sshtest.SFTPOpendir, path).Code(); code != want {
+			t.Errorf("opendir %s: status %d, want %d", path, code, want)
+		}
+	}
+
+	// Open folders count as handles, and the end of the session closes them.
+	for i := 0; i < MaxHandles; i++ {
+		s.Call(sshtest.SFTPOpendir, "/docs").Handle()
+	}
+	if code, message := s.Call(sshtest.SFTPOpendir, "/docs").Status(); code != sshtest.SFTPFailure || message != "too many open files in this session" {
+		t.Errorf("one folder more than the limit: %d %q", code, message)
+	}
+	if err := s.end(); err != nil {
+		t.Errorf("Serve returned %v", err)
+	}
+	if fs.opened() != 0 {
+		t.Errorf("%d folders are open after the session", fs.opened())
+	}
+}
+
+func TestReaddirInSeveralAnswers(t *testing.T) {
+	tests := []struct {
+		name string
+		// files and nameLength are how many files the folder has, and how long their names are.
+		files, nameLength int
+		// wantFirst is how many names the first answer has.
+		wantFirst int
+	}{
+		{"fewer than an answer holds", 7, 8, 7},
+		{"exactly what an answer holds", 100, 8, 100},
+		{"more than an answer holds", 250, 8, 100},
+		// Names so long that a hundred of them do not fit half a packet. An entry takes 2 005
+		// bytes (the name, the long name, 12 of attributes), and one more is added while there
+		// is room for it with 32 bytes of attributes, the most there can be.
+		{"long names", 120, 990, (maxNamesPacket-13-(990+4+995+4+32))/(990+4+995+4+12) + 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fs := newMemFS()
+			want := map[string]bool{}
+			for i := 0; i < tt.files; i++ {
+				name := fmt.Sprintf("%0*d", tt.nameLength, i)
+				fs.put("/dir/"+name, "")
+				want[name] = true
+			}
+			s := start(t, fs)
+			dir := s.Call(sshtest.SFTPOpendir, "/dir").Handle()
+			answers := 0
+			for {
+				reply := s.Call(sshtest.SFTPReaddir, dir)
+				if reply.Type == sshtest.SFTPStatus {
+					if code := reply.Code(); code != sshtest.SFTPEOF {
+						t.Fatalf("readdir: status %d", code)
+					}
+					break
+				}
+				if len(reply.Body)+9 > maxNamesPacket {
+					t.Errorf("an answer of %d bytes", len(reply.Body)+9)
+				}
+				names := reply.Names()
+				if answers == 0 && len(names) != tt.wantFirst {
+					t.Errorf("the first answer has %d names, want %d", len(names), tt.wantFirst)
+				}
+				if len(names) == 0 || len(names) > maxEntries {
+					t.Fatalf("an answer with %d names", len(names))
+				}
+				for _, entry := range names {
+					if !want[entry.Name] {
+						t.Fatalf("the name %q was not expected, or came twice", entry.Name)
+					}
+					delete(want, entry.Name)
+				}
+				answers++
+			}
+			if len(want) != 0 {
+				t.Errorf("%d names were never listed", len(want))
+			}
+		})
+	}
+}
+
+func TestANameThatNoPacketHoldsIsLeftOut(t *testing.T) {
+	fs := newMemFS()
+	fs.put("/dir/a", "")
+	fs.put("/dir/b"+strings.Repeat("x", maxNamesPacket), "")
+	fs.put("/dir/c", "")
+	s := start(t, fs)
+	dir := s.Call(sshtest.SFTPOpendir, "/dir").Handle()
+	var got []string
+	for {
+		reply := s.Call(sshtest.SFTPReaddir, dir)
+		if reply.Type == sshtest.SFTPStatus {
+			break
+		}
+		for _, entry := range reply.Names() {
+			got = append(got, entry.Name)
+		}
+	}
+	if !reflect.DeepEqual(got, []string{"a", "c"}) {
+		t.Errorf("listed %d names: %.40q", len(got), got)
+	}
+}
+
+func TestWhatTheOtherRequestsAskOfTheFileSystem(t *testing.T) {
+	fs := newMemFS()
+	fs.put("/file", "x")
+	s := start(t, fs)
+	// The file system in memory answers each of these with the request in its own words.
+	tests := []struct {
+		name        string
+		kind        byte
+		fields      []any
+		wantMessage string
+	}{
+		{"mkdir", sshtest.SFTPMkdir, []any{"/new", sshtest.SFTPAttrs{Flags: sshtest.SFTPAttrPermissions, Mode: 0o750}}, "mkdir /new 750"},
+		{"rmdir", sshtest.SFTPRmdir, []any{"/old"}, "rmdir /old"},
+		{"rename does not replace", sshtest.SFTPRename, []any{"/a", "/b"}, "rename /a /b false"},
+		{"posix-rename replaces", sshtest.SFTPExtended, []any{"posix-rename@openssh.com", "/a", "/b"}, "rename /a /b true"},
+		// OpenSSH's order: what the link points to comes first.
+		{"symlink", sshtest.SFTPSymlink, []any{"../target", "/link"}, "symlink /link -> ../target"},
+		{"hardlink", sshtest.SFTPExtended, []any{"hardlink@openssh.com", "/file", "/other"}, "link /file /other"},
+	}
+	for _, tt := range tests {
+		if code, message := s.Call(tt.kind, tt.fields...).Status(); code != sshtest.SFTPFailure || message != tt.wantMessage {
+			t.Errorf("%s: %d %q, want %q", tt.name, code, message, tt.wantMessage)
+		}
+	}
+
+	names := s.Call(sshtest.SFTPReadlink, "/link").Names()
+	if len(names) != 1 || names[0].Name != "where/it/points" || names[0].LongName != names[0].Name || names[0].Attrs.Flags != 0 {
+		t.Errorf("readlink = %+v", names)
+	}
+	if code := s.Call(sshtest.SFTPReadlink, "/file").Code(); code != sshtest.SFTPNoSuchFile {
+		t.Errorf("readlink of what is not a link: status %d", code)
+	}
+
+	wantVFS := []uint64{1, 2, 3, 4, 5, 6, 7, 8, 9, VFSNoSUID, 255}
+	if got := s.Call(sshtest.SFTPExtended, "statvfs@openssh.com", "/file").Uint64s(); !reflect.DeepEqual(got, wantVFS) {
+		t.Errorf("statvfs = %v, want %v", got, wantVFS)
+	}
+	if code := s.Call(sshtest.SFTPExtended, "statvfs@openssh.com", "/missing").Code(); code != sshtest.SFTPNoSuchFile {
+		t.Errorf("statvfs of a missing path: status %d", code)
+	}
+	handle := s.Open("/file", sshtest.SFTPOpenRead, sshtest.SFTPAttrs{})
+	if got := s.Call(sshtest.SFTPExtended, "fstatvfs@openssh.com", handle).Uint64s(); !reflect.DeepEqual(got, wantVFS) {
+		t.Errorf("fstatvfs = %v, want %v", got, wantVFS)
+	}
+	if code := s.Call(sshtest.SFTPExtended, "fsync@openssh.com", handle).Code(); code != sshtest.SFTPOK || fs.synced != 1 {
+		t.Errorf("fsync: status %d, %d syncs", code, fs.synced)
+	}
+	if got, want := s.Call(sshtest.SFTPExtended, "limits@openssh.com").Uint64s(), []uint64{MaxPacket, MaxRead, MaxPacket - 1024, MaxHandles}; !reflect.DeepEqual(got, want) {
+		t.Errorf("limits = %v, want %v", got, want)
+	}
+}
+
+func TestTheOtherRequestsWithFieldsCutShort(t *testing.T) {
+	s := start(t, newMemFS())
+	tests := []struct {
+		name   string
+		kind   byte
+		fields []any
+	}{
+		{"opendir without a path", sshtest.SFTPOpendir, nil},
+		{"readdir without a handle", sshtest.SFTPReaddir, nil},
+		{"mkdir without attributes", sshtest.SFTPMkdir, []any{"/new"}},
+		{"rmdir without a path", sshtest.SFTPRmdir, nil},
+		{"rename with one path", sshtest.SFTPRename, []any{"/a"}},
+		{"readlink without a path", sshtest.SFTPReadlink, nil},
+		{"symlink with one path", sshtest.SFTPSymlink, []any{"/a"}},
+		{"an extension without a name", sshtest.SFTPExtended, nil},
+		{"an extension with a name cut short", sshtest.SFTPExtended, []any{sshtest.SFTPRaw{0, 0, 0, 30, 'f'}}},
+		{"posix-rename with one path", sshtest.SFTPExtended, []any{"posix-rename@openssh.com", "/a"}},
+		{"hardlink with one path", sshtest.SFTPExtended, []any{"hardlink@openssh.com", "/a"}},
+		{"fsync without a handle", sshtest.SFTPExtended, []any{"fsync@openssh.com"}},
+		{"statvfs without a path", sshtest.SFTPExtended, []any{"statvfs@openssh.com"}},
+		{"fstatvfs without a handle", sshtest.SFTPExtended, []any{"fstatvfs@openssh.com"}},
+	}
+	for _, tt := range tests {
+		if code, message := s.Call(tt.kind, tt.fields...).Status(); code != sshtest.SFTPBadMessage || message != "Bad message" {
+			t.Errorf("%s: %d %q", tt.name, code, message)
+		}
+	}
+}
+
+func TestModeString(t *testing.T) {
+	tests := []struct {
+		mode uint32
+		want string
+	}{
+		{0o100644, "-rw-r--r--"},
+		{0o040755, "drwxr-xr-x"},
+		{0o120777, "lrwxrwxrwx"},
+		{0o020620, "crw--w----"},
+		{0o060660, "brw-rw----"},
+		{0o010600, "prw-------"},
+		{0o140755, "srwxr-xr-x"},
+		{0o100000, "----------"},
+		{0o104755, "-rwsr-xr-x"},
+		{0o104644, "-rwSr--r--"},
+		{0o102755, "-rwxr-sr-x"},
+		{0o102745, "-rwxr-Sr-x"},
+		{0o041777, "drwxrwxrwt"},
+		{0o041776, "drwxrwxrwT"},
+		{0o107777, "-rwsrwsrwt"},
+		{0o000644, "?rw-r--r--"},
+	}
+	for _, tt := range tests {
+		if got := modeString(tt.mode); got != tt.want {
+			t.Errorf("modeString(%o) = %q, want %q", tt.mode, got, tt.want)
+		}
+	}
+}
+
+func TestLongName(t *testing.T) {
+	now := time.Date(2026, 11, 24, 12, 0, 0, 0, time.UTC)
+	tests := []struct {
+		name  string
+		file  string
+		mode  uint32
+		links uint64
+		owner string
+		group string
+		size  uint64
+		mtime time.Time
+		want  string
+	}{
+		{
+			"a file of today", "notes.txt", 0o100644, 1, "ada", "users", 1234, now.Add(-3 * time.Hour),
+			"-rw-r--r--    1 ada      users        1234 Nov 24 09:00 notes.txt",
+		},
+		{
+			"a day of one digit", "a", 0o040755, 12, "ada", "users", 4096, time.Date(2026, 7, 4, 8, 5, 0, 0, time.UTC),
+			"drwxr-xr-x   12 ada      users        4096 Jul  4 08:05 a",
+		},
+		{
+			"older than half a year: the year", "old", 0o100600, 1, "ada", "users", 5, time.Date(2025, 1, 31, 23, 59, 0, 0, time.UTC),
+			"-rw-------    1 ada      users           5 Jan 31  2025 old",
+		},
+		{
+			"from the future: the year", "new", 0o100600, 1, "ada", "users", 5, now.Add(time.Minute),
+			"-rw-------    1 ada      users           5 Nov 24  2026 new",
+		},
+		{
+			"long names and large numbers push the columns", "big file", 0o120777, 1000, "a-long-user-name", "a-long-group", 123456789012, now,
+			"lrwxrwxrwx  1000 a-long-user-name a-long-group 123456789012 Nov 24 12:00 big file",
+		},
+	}
+	for _, tt := range tests {
+		if got := longName(tt.file, tt.mode, tt.links, tt.owner, tt.group, tt.size, tt.mtime, now); got != tt.want {
+			t.Errorf("%s:\n got %q\nwant %q", tt.name, got, tt.want)
+		}
 	}
 }

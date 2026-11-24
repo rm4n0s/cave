@@ -393,6 +393,9 @@ func (o *OpenSSH) SFTP(user string, key Key, batch string) Result {
 	full := append(o.Options(key), "-P", o.port, "-b", "-", user+"@"+o.host)
 	res := o.Run(batch, "sftp", full...)
 	o.log(res, "sftp", []string{"-b", "-", user + "@" + o.host})
+	for _, command := range strings.Split(strings.TrimSpace(batch), "\n") {
+		o.t.Logf("    sftp> %s", command)
+	}
 	return res
 }
 
