@@ -79,9 +79,9 @@ This file breaks the milestones in `docs/SPEC.md` §18 into small steps. Each st
     git tag step-1.2
     git branch -d feat/step-1.2-people
     ```
-    - **Publish a milestone.** When the last step of a milestone (a `## M<n>` section below) is merged, **ask the user for the version number** (CLAUDE.md "Git and GitHub"), tag it, and push `main` and the tags. The milestone counts as published when that commit is on `origin/main`.
+    - **Publish a milestone.** When the last step of a milestone (a `## M<n>` section below) is merged, tag it with the milestone's version and push `main` and the tags, **without asking the user** (CLAUDE.md "Git and GitHub": `M<n>` is `v0.<n+1>.0`). That last step also set `devVersion` to `0.<n+2>.0-dev`. The milestone counts as published when that commit is on `origin/main`.
     ```sh
-    git tag -a vX.Y.Z -m "M<n>: <title>"
+    git tag -a v0.<n+1>.0 -m "M<n>: <title>"
     git push origin main
     git push origin --tags
     ```
