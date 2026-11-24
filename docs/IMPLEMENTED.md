@@ -38,3 +38,14 @@ One entry per finished step of `docs/IMPLEMENTATION.md`, newest last. Format:
 - **Proof**: none
 - **Manual checks**: none
 - **Glutter issues**: none
+
+## Step 0.3: Storage
+- **Date**: 2026-11-24
+- **Branch**: feat/step-0.3-storage
+- **Summary**: `internal/core/storage`: `Resolve` decides the configuration, state and runtime folders (flags, then `CAVE_CONFIG_DIR`/`CAVE_STATE_DIR`, then XDG on Linux and `%AppData%`/`%LocalAppData%` on Windows); `Ensure` creates them with mode `0700`; `WriteFileAtomic`; `ReadFile` with a size limit; `Acquire`/`Release`, the one-instance lock (`flock` on Linux, `LockFileEx` on a byte far from the holder's line on Windows). `storagetest.Isolate` gives a test its own folders, home and XDG folders and removes the SSH agent from its environment. Adds `golang.org/x/sys`.
+- **Decisions**: the lock's function is `Acquire` (a type and a function cannot both be `Lock`; the plan's text is updated). A folder given by a flag or a `CAVE_` variable must be absolute (`StorageDirNotAbsolute`); the programs make a flag absolute before they pass it (step 4.1). Relative XDG variables are ignored, as the XDG specification says. Without `XDG_RUNTIME_DIR` the runtime folder is `<tmp>/cave-<uid>`, and `Ensure` refuses a runtime folder that is not a real folder of this user with mode `0700` (`StorageRuntimeDirUnsafe`): another user could have made it first. Each function that takes a `ctx` refuses a cancelled one with its own Tag. The close of a file that was only read is not an error. Platform primitives (`tryLock`, `unlock`, `syncDir`) return the OS's error as it is, and their one caller tags it.
+- **Checks**: `scripts/checks.sh` passed (gofmt, vet for Linux and Windows, golangci-lint 0 issues, race tests as a debug build, cgo-free build and tests, Windows build, error tags: none untested). The Wine run is skipped until step 0.5 adds its script; the Windows tests of this step (`TestResolveOnWindows`, and the lock and file tests, which are not Linux-only) first run there.
+- **Tests**: the resolution table on Linux (11 cases) and on Windows (6 cases, in a `_windows_test.go`); folder and file modes; every step of the atomic write failing through a fake file system, with the old content kept and the temporary file removed; read limits and errors; the lock (a second holder is refused with the first one's program and PID, release and take again, different folders, each failing step); the runtime folder's refusals (open to others, a symbolic link, a file, a parent that cannot be searched or written); `Isolate` leaves no variable pointing into the real home and restores the environment.
+- **Proof**: none
+- **Manual checks**: none
+- **Glutter issues**: none

@@ -124,7 +124,7 @@ This file breaks the milestones in `docs/SPEC.md` §18 into small steps. Each st
 ### Step 0.3: Storage
 **Read**: SPEC §5, §14.1.
 **Tasks**
-- `internal/core/storage`: `Dirs{Config, State, Runtime}`; `Resolve(Options{ConfigDir, StateDir}, env)` by SPEC §5.1 on Linux and Windows; `(Dirs).Ensure(ctx)` (mode `0700`); `WriteFileAtomic(ctx, path, data)` (SPEC §5.3); `ReadFile(ctx, path, maxBytes)` (a missing file is reported with the sentinel `ErrNotExist`; a file over the limit is `FileTooLarge`); `Lock(ctx, dirs, program)` and `(*Lock).Release()` (SPEC §5.4; `flock` in `_linux.go`, `LockFileEx` in `_windows.go`; `AlreadyRunning` has the holder's program and PID in its metadata).
+- `internal/core/storage`: `Dirs{Config, State, Runtime}`; `Resolve(Options{ConfigDir, StateDir}, env)` by SPEC §5.1 on Linux and Windows; `(Dirs).Ensure(ctx)` (mode `0700`); `WriteFileAtomic(ctx, path, data)` (SPEC §5.3); `ReadFile(ctx, path, maxBytes)` (a missing file is reported with the sentinel `ErrNotExist`; a file over the limit is `FileTooLarge`); `Acquire(ctx, dirs, program) (*Lock, error)` and `(*Lock).Release()` (SPEC §5.4; `flock` in `_linux.go`, `LockFileEx` in `_windows.go`; `AlreadyRunning` has the holder's program and PID in its metadata).
 - `internal/core/storage/storagetest`: `Isolate(t) storage.Dirs` (SPEC §14.1).
 **Tests**: resolution table (flags, variables, XDG, defaults; Windows cases in a `_windows_test.go`); modes of folders and files; an atomic write that fails leaves the old content; a second lock fails and says who holds it; release then lock again works; `Isolate` leaves no variable pointing at the real home.
 
