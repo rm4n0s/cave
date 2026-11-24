@@ -72,7 +72,9 @@ func pageBindings(p page) []binding {
 		return []binding{{"enter", "open"}, {"a", "add"}, {"e", "rename"}, {"space", "on/off"}, {"d", "remove"}}
 	case pageAttempts:
 		return []binding{{"f", "filter"}, {"/", "search"}, {"enter", "show"}, {"d", "remove"}, {"C", "clear"}}
-	case pageConnections, pageSettings:
+	case pageConnections:
+		return []binding{{"d", "disconnect"}, {"D", "disconnect all"}}
+	case pageSettings:
 		return nil
 	}
 	return nil

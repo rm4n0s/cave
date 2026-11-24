@@ -85,6 +85,10 @@ type Model struct {
 	attemptList   list
 	attemptSel    string
 	attemptDetail bool
+
+	// The Connections page: the selection, kept by the connection's id.
+	connList list
+	connSel  string
 	// message is the text of the message line; messageErr says that it is an error.
 	message    string
 	messageErr bool
@@ -115,6 +119,7 @@ func (m *Model) refresh() {
 	m.syncPeople()
 	m.syncKeys()
 	m.syncAttempts()
+	m.syncConnections()
 }
 
 // Init starts nothing: the program sends the size by itself.
@@ -130,6 +135,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.peopleList.setHeight(m.height - chrome - 1)
 		m.keyList.setHeight(m.height - chrome - 2)
 		m.attemptList.setHeight(m.height - chrome - 2)
+		m.connList.setHeight(m.height - chrome - 1)
 	case changedMsg, tickMsg:
 		m.refresh()
 	case doneMsg:
@@ -223,7 +229,9 @@ func (m Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m.keyPeople(msg)
 		case pageAttempts:
 			return m.keyAttempts(msg)
-		case pageOverview, pageConnections, pageSettings, pageCount:
+		case pageConnections:
+			return m.keyConnections(msg)
+		case pageOverview, pageSettings, pageCount:
 		}
 	}
 	return m, nil

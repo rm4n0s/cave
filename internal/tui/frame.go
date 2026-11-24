@@ -49,7 +49,7 @@ func (m Model) render() string {
 // right.
 func (m Model) header() string {
 	left := m.st.title.Render("Cave") + "   " + m.stateText()
-	right := strconv.Itoa(len(m.connections)) + " connected · " + strconv.Itoa(len(m.attempts.Entries)) + " attempts"
+	right := strconv.Itoa(len(m.connections)) + " connected · " + plural(len(m.attempts.Entries), "attempt")
 	if gap := m.width - lipgloss.Width(left) - lipgloss.Width(right); gap >= 2 {
 		return left + strings.Repeat(" ", gap) + right
 	}
@@ -128,6 +128,8 @@ func (m Model) pageLines(height int) []string {
 		return m.overviewLines(height)
 	case pageAttempts:
 		return m.attemptLines(height)
+	case pageConnections:
+		return m.connectionLines(height)
 	case pagePeople:
 		if m.personID != "" {
 			return m.personLines(height)

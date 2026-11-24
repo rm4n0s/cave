@@ -368,3 +368,14 @@ One entry per finished step of `docs/IMPLEMENTATION.md`, newest last. Format:
 - **Proof**: [5.6-attempts.txt](implemented-proof-images/5.6-attempts.txt), made with real `ssh` attempts (a right key, a wrong key, a name nobody has, twice) against the isolated TUI.
 - **Manual checks**: none
 - **Glutter issues**: none
+
+## Step 5.7: The Connections page
+- **Date**: 2026-11-24
+- **Branch**: feat/step-5.7-connections
+- **Summary**: `internal/tui/page_connections.go`: the table of who is connected now (person, address, since when with `app.Ago`, and what each has open with `app.ActivitiesText`), `d` to disconnect the selected connection after asking ("Disconnect alice (198.51.100.7)?"), `D` to disconnect everybody after asking ("Disconnect all 3 connections?", or "Disconnect the connection?" for one; nothing happens when nobody is connected); the selection stays on the same connection by id. The interface `App` gained `Disconnect` and `DisconnectAll`. The header says "1 attempt" in the singular.
+- **Decisions**: the address column has a fixed width (20 cells, 16 below 80 columns) and the column of what is open takes the rest, because what a connection has open can be long and the address almost never is; an IPv6 address that is longer than the column is cut with `…`. The times move on with every tick of the model's clock.
+- **Checks**: `scripts/checks.sh` passed, every check (gofmt, vet for Linux and Windows, golangci-lint 0 issues, race tests as a debug build, cgo-free build and tests, Windows build, error tags: none untested, the Wine run). `pgrep` shows no tmux, tcave or ssh process of the step left.
+- **Tests**: goldens of the page at 100×30 and 60×16 (the sample, nothing, three connections with every kind of activity, the two questions); the words of the table and the times moving on with the clock; disconnecting one (the question with the name and the address, the default is no, the call with the connection's id); disconnecting all (the question, esc, the call, the singular); nothing to do with nobody connected; the selection staying with a new connection first, a connection leaving and an emptied list; with the real application two clients connect, the page shows both, `d` and `y` close the selected one and not the other, and `D` closes the rest. The header's singular.
+- **Proof**: [5.7-connections.txt](implemented-proof-images/5.7-connections.txt), the page with a live `ssh` session of `alice` (an `exec` of `sleep 30`).
+- **Manual checks**: none
+- **Glutter issues**: none

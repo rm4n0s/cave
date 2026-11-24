@@ -259,6 +259,21 @@ func TestTheFirstPage(t *testing.T) {
 	}
 }
 
+func TestTheCountsInTheHeader(t *testing.T) {
+	f := apptest.Sample(t)
+	f.AttemptsSnapshot.Entries = f.AttemptsSnapshot.Entries[:1]
+	f.ConnectionList = nil
+	first := strings.Split(newFakeHarness(t, f, 100, 30).screen(), "\n")[0]
+	if !strings.HasSuffix(strings.TrimRight(first, " "), "0 connected · 1 attempt") {
+		t.Errorf("the header is %q", first)
+	}
+	f.AttemptsSnapshot.Entries = nil
+	first = strings.Split(newFakeHarness(t, f, 100, 30).screen(), "\n")[0]
+	if !strings.HasSuffix(strings.TrimRight(first, " "), "0 connected · 0 attempts") {
+		t.Errorf("the header is %q", first)
+	}
+}
+
 func TestTheStateInTheHeader(t *testing.T) {
 	tests := []struct {
 		name  string

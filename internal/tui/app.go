@@ -37,4 +37,6 @@ type App interface {
 	RemoveKey(ctx context.Context, personID, keyID string) error
 	ClearAttempts(ctx context.Context) error
 	RemoveAttempt(ctx context.Context, id string) error
+	Disconnect(ctx context.Context, id string) error
+	DisconnectAll()
 }
