@@ -27,4 +27,4 @@ Keys everywhere
                                                                                                     
 ────────────────────────────────────────────────────────────────────────────────────────────────────
                                                                                                     
-? keys   q quit                                                                                     
+s start or stop the server   ? keys   q quit                                                        

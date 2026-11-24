@@ -63,6 +63,28 @@ func globalBindings() []binding {
 // pageBindings are the keys of one page. The footer shows them first and the help overlay lists
 // them under the page's name. Both are drawn from these lists, so they cannot disagree. The
 // pages add their rows here as they are built.
-func pageBindings(_ page) []binding {
+func pageBindings(p page) []binding {
+	switch p {
+	case pageOverview:
+		return []binding{{"s", "start or stop the server"}}
+	case pagePeople, pageAttempts, pageConnections, pageSettings:
+		return nil
+	}
 	return nil
+}
+
+// ownBindings are the keys of a page that do not work on every page: what the help lists under
+// the page's name (the footer shows all of pageBindings).
+func ownBindings(p page) []binding {
+	global := map[string]bool{}
+	for _, b := range globalBindings() {
+		global[b.keys] = true
+	}
+	var rows []binding
+	for _, b := range pageBindings(p) {
+		if !global[b.keys] {
+			rows = append(rows, b)
+		}
+	}
+	return rows
 }

@@ -324,3 +324,14 @@ One entry per finished step of `docs/IMPLEMENTATION.md`, newest last. Format:
 - **Proof**: none
 - **Manual checks**: none
 - **Glutter issues**: none
+
+## Step 5.3: The Overview page
+- **Date**: 2026-11-24
+- **Branch**: feat/step-5.3-overview
+- **Summary**: `internal/tui/page_overview.go`: the server's state with what `s` does, the reason when the server is not running (the sentence of `app.Message`, wrapped, at most two lines), the host key's fingerprint with who sees it, the `ssh` lines from `Server().Command` for each address (naming the first enabled person, or `name`), the counts of people, connections and attempts, and a hint to press `2` when there are no people. The Overview's key row (`s`) is in the key table.
+- **Decisions**: the fingerprint is never cut: on a screen too narrow for it beside its label it gets a line of its own. A page too short for everything shows the first address and "… and N more". The hint under the host key is a separate line (it did not fit beside the fingerprint at 100 columns). The help does not list a key twice: rows of a page that are also global (`s`) show in the footer only. With nobody enabled the heading is "How to connect:" and the lines say `name`.
+- **Checks**: `scripts/checks.sh` passed, every check (gofmt, vet for Linux and Windows, golangci-lint 0 issues, race tests as a debug build, cgo-free build and tests, Windows build, error tags: none untested, the Wine run).
+- **Tests**: goldens of the Overview at 100×30 and 60×16 for the sample, nothing installed, stopped, the listen error, starting, no people and one disabled person; the command lines equal `Command(...)` for each address, with the port and without it for port 22; the first enabled person is named, and `name` with nobody; the error is on two lines at most and not shown while the server runs; the fingerprint is whole at widths 60 to 100; the footer of the Overview has `s` and the others do not, and the help lists it once; a short page keeps the first address and the counts. The goldens of step 5.1 changed (the placeholder became the page) and were read again.
+- **Proof**: [5.3-overview.txt](implemented-proof-images/5.3-overview.txt), the TUI with the fixture of two people: the running server, the fingerprint and the `ssh` line with `alice`.
+- **Manual checks**: none
+- **Glutter issues**: none

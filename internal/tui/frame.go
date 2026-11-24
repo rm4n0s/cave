@@ -111,7 +111,11 @@ func (m Model) body(height int) []string {
 }
 
 // pageLines draws the current page into at most height lines.
-func (m Model) pageLines(_ int) []string {
+func (m Model) pageLines(height int) []string {
+	switch m.page {
+	case pageOverview:
+		return m.overviewLines(height)
+	}
 	return []string{m.st.title.Render(m.page.title())}
 }
 
@@ -119,7 +123,7 @@ func (m Model) pageLines(_ int) []string {
 func (m Model) helpLines() []string {
 	lines := []string{m.st.title.Render("Keys everywhere")}
 	lines = append(lines, m.bindingLines(globalBindings())...)
-	if rows := pageBindings(m.page); len(rows) > 0 {
+	if rows := ownBindings(m.page); len(rows) > 0 {
 		lines = append(lines, "", m.st.title.Render("Keys of "+m.page.title()))
 		lines = append(lines, m.bindingLines(rows)...)
 	}
