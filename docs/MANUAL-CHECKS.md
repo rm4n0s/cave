@@ -23,3 +23,13 @@ Does a notification appear (`alice connected`, `From 127.0.0.1`)? And for a refu
 ```
 CAVE_PROOF_PORT=<port> CAVE_PROOF_FIXTURE=scripts/testdata/two-people scripts/proof-ssh.sh nobody mallory true
 ```
+
+## Step 7.2: a terminal session on a Windows PC
+
+Wine makes the pseudo console but does not connect the process's standard handles to it, so the tests that read a terminal's output skip under Wine (`TestShellOnATerminalOnWindows`). On a Windows PC, with `tcave.exe` running and a person added whose key your `ssh` has:
+
+```
+ssh -t <person>@<pc>
+```
+
+Does it give a `cmd.exe` prompt? Does `dir` print? Does `echo %CAVE_PERSON%` print the person's name? Does resizing the terminal window change what `mode con` shows? Does `exit` end the session? (`ssh -t <person>@<pc> exit 5` must give the status 5: `echo %ERRORLEVEL%` or `echo $?` afterwards.)

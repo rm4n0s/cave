@@ -102,6 +102,16 @@ func (p *Pty) Master() *os.File {
 	return p.master
 }
 
+// Output returns what Cave reads the terminal's output from: the master side.
+func (p *Pty) Output() *os.File {
+	return p.master
+}
+
+// Input returns what Cave writes the terminal's input to: the master side.
+func (p *Pty) Input() *os.File {
+	return p.master
+}
+
 // Slave returns the side that becomes the process's terminal; nil after CloseSlave.
 func (p *Pty) Slave() *os.File {
 	p.mu.Lock()

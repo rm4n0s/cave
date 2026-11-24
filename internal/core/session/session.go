@@ -5,7 +5,6 @@ import (
 	"io"
 	"log/slog"
 	"os"
-	"os/exec"
 	"sync"
 	"time"
 
@@ -103,16 +102,6 @@ type session struct {
 	proc *process
 	// done is closed when the process ended and its output and status were sent.
 	done chan struct{}
-}
-
-// process is the process of a session.
-type process struct {
-	cmd *exec.Cmd
-	// exited is closed when the process ended.
-	exited chan struct{}
-	// group is what the platform keeps to end the process and what it started: nothing on Linux,
-	// where the process leads a process group, and the job object on Windows.
-	group processGroup
 }
 
 // serve runs one session channel until the process it started has ended and reported, or the
@@ -331,7 +320,7 @@ func (s *session) start(command string, login bool) bool {
 		return true
 	}
 	s.proc = proc
-	logger.Info("session started", "pid", proc.cmd.Process.Pid)
+	logger.Info("session started", "pid", proc.pid)
 	remove := s.conn.AddActivity(kind, detail)
 
 	// The output goes to the client until the pipes end: when the process and everything it
@@ -430,7 +419,7 @@ func (s *session) hangUp() {
 	case <-s.proc.exited:
 	default:
 		if s.pty != nil {
-			_ = s.pty.Close() // the system sends SIGHUP to the processes on the terminal
+			hangUpTerminal(s.proc, s.pty)
 			return
 		}
 		hangUpProcess(s.proc)
@@ -440,7 +429,7 @@ func (s *session) hangUp() {
 // spawn starts the process and returns what to read its output from: the terminal when the
 // session has one (and then no separate error stream), else the read ends of two pipes. Its
 // input is what the client sends on the channel, until the client ends it.
-func (h *handler) spawn(shell, command string, login bool, env []string, stdin io.Reader, terminal *pty.Pty) (*process, *os.File, *os.File, error) {
+func (h *handler) spawn(shell, command string, login bool, env []string, stdin io.Reader, terminal *pty.Pty) (*process, io.ReadCloser, io.ReadCloser, error) {
 	cmd, err := newCommand(shell, command, login, terminal != nil)
 	if err != nil {
 		return nil, nil, nil, err
@@ -472,29 +461,28 @@ func (h *handler) spawn(shell, command string, login bool, env []string, stdin i
 		}
 		cmd.Stdin, cmd.Stdout, cmd.Stderr = files[0], files[3], files[5]
 	}
-	if err := cmd.Start(); err != nil {
+	proc, err := startCommand(cmd, terminal)
+	if err != nil {
 		closeAll()
 		return nil, nil, nil, errors.NewErr(TagSessionStartFailed, err).SetMetadata("shell", sanitize.Display(shell, maxCommandLog))
 	}
-	group, err := startGroup(cmd)
+	proc.exited = make(chan struct{})
+	proc.group, err = startGroup(proc)
 	if err != nil {
-		_ = cmd.Process.Kill() // the process runs outside its group: it is not left behind
-		_ = cmd.Wait()         // collects it; how it ended does not matter
+		abandon(proc) // the process runs outside its group: it is not left behind
 		closeAll()
 		return nil, nil, nil, err
 	}
-	proc := &process{cmd: cmd, exited: make(chan struct{}), group: group}
 
 	if terminal != nil {
 		// The process has the terminal; Cave keeps only the master side.
 		terminal.CloseSlave()
-		master := terminal.Master()
 		go func() {
 			// It ends when the client ends its side or the terminal is closed. A terminal has no
 			// end of input to pass on: the client's end of file changes nothing, as with sshd.
-			_, _ = io.Copy(master, stdin)
+			_, _ = io.Copy(terminal.Input(), stdin)
 		}()
-		return proc, master, nil, nil
+		return proc, terminal.Output(), nil, nil
 	}
 	// The process has its ends of the pipes; Cave keeps the others.
 	inW, outR, errR := files[1], files[2], files[4]

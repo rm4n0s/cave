@@ -1,7 +1,6 @@
 package session
 
 import (
-	"os/exec"
 	"sync"
 	"unsafe"
 
@@ -31,7 +30,7 @@ type job struct {
 
 // startGroup makes the job of the process that has just started and puts the process in it. The
 // processes that it starts after that are in the job too.
-func startGroup(cmd *exec.Cmd) (processGroup, error) {
+func startGroup(proc *process) (processGroup, error) {
 	handle, err := windows.CreateJobObject(nil, nil)
 	if err != nil {
 		return processGroup{}, errors.NewErr(TagSessionJobCreateFailed, err)
@@ -46,7 +45,7 @@ func startGroup(cmd *exec.Cmd) (processGroup, error) {
 		_ = windows.CloseHandle(handle) // nothing is in the job yet
 		return processGroup{}, errors.NewErr(TagSessionJobLimitFailed, err)
 	}
-	process, err := windows.OpenProcess(windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE, false, uint32(cmd.Process.Pid))
+	process, err := windows.OpenProcess(windows.PROCESS_SET_QUOTA|windows.PROCESS_TERMINATE, false, uint32(proc.pid))
 	if err != nil {
 		_ = windows.CloseHandle(handle) // as above
 		return processGroup{}, errors.NewErr(TagSessionJobOpenFailed, err)

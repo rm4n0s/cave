@@ -104,3 +104,37 @@ func sortFold(lines []string) {
 		}
 	}
 }
+
+func TestWindowsEnvBlock(t *testing.T) {
+	u := func(s string) []uint16 {
+		var out []uint16
+		for _, r := range s {
+			out = append(out, uint16(r))
+		}
+		return out
+	}
+	tests := []struct {
+		name string
+		env  []string
+		want []uint16
+		err  bool
+	}{
+		{"empty is two zeros", nil, []uint16{0, 0}, false},
+		{"sorted ignoring case, each ended by a zero and the block by one more", []string{"b=2", "A=1", "C=3"},
+			append(append(append(u("A=1"), 0), append(u("b=2"), 0)...), append(append(u("C=3"), 0), 0)...), false},
+		{"a letter outside ASCII is one UTF-16 unit", []string{"N=é"}, append(append(u("N=é"), 0), 0), false},
+		{"a letter outside the first plane is a pair", []string{"N=😀"}, []uint16{'N', '=', 0xd83d, 0xde00, 0, 0}, false},
+		{"a zero inside is refused", []string{"A=1\x00B=2"}, nil, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := windowsEnvBlock(tt.env)
+			if (err != nil) != tt.err {
+				t.Fatalf("error = %v, want an error: %v", err, tt.err)
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("got %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

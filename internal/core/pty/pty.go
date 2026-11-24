@@ -18,7 +18,10 @@ const (
 	TagSlaveOpenFailed  = "PtySlaveOpenFailed"
 	TagResizeFailed     = "PtyResizeFailed"
 	TagModesApplyFailed = "PtyModesApplyFailed"
-	TagUnsupported      = "PtyUnsupported"
+	TagInputPipeFailed  = "PtyInputPipeFailed"
+	TagOutputPipeFailed = "PtyOutputPipeFailed"
+	TagConsoleFailed    = "PtyConsoleFailed"
+	TagClosed           = "PtyClosed"
 )
 
 // MaxCells is the largest number of columns or rows a terminal may have.

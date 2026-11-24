@@ -3,6 +3,8 @@ package session
 import (
 	"os/exec"
 	"syscall"
+
+	"github.com/rm4n0s/cave/internal/core/pty"
 )
 
 // rootDir is where a session starts when the home folder is not there.
@@ -22,13 +24,43 @@ var signalNames = map[syscall.Signal]string{
 	syscall.SIGTERM: "TERM", syscall.SIGUSR1: "USR1", syscall.SIGUSR2: "USR2",
 }
 
+// process is the process of a session. pid is its id; cmd is the command that started it; exited
+// is closed when it ended; group is what the platform keeps to end it and what it started.
+type process struct {
+	pid    int
+	cmd    *exec.Cmd
+	exited chan struct{}
+	group  processGroup
+}
+
+// startCommand starts the command. On a terminal the process has the slave side for its standard
+// input and output (set by the caller) and leads a session of its own.
+func startCommand(cmd *exec.Cmd, _ *pty.Pty) (*process, error) {
+	if err := cmd.Start(); err != nil {
+		return nil, err
+	}
+	return &process{pid: cmd.Process.Pid, cmd: cmd}, nil
+}
+
+// abandon ends a process that started but cannot be used, and collects it.
+func abandon(proc *process) {
+	_ = proc.cmd.Process.Kill() // it may have ended already
+	_ = proc.cmd.Wait()         // how it ended does not matter
+}
+
+// hangUpTerminal tells a process on a terminal that its session is gone: closing the terminal
+// makes the system send SIGHUP to the processes on it.
+func hangUpTerminal(_ *process, terminal *pty.Pty) {
+	_ = terminal.Close() // a terminal that is closed already is fine
+}
+
 // processGroup is what the platform keeps of the process's group: on Linux the group is the
 // process's own and needs nothing kept.
 type processGroup struct{}
 
 // startGroup puts the process that has just started in the group that the platform ends it
 // with: on Linux it leads one (newCommand asked for it), so there is nothing to do.
-func startGroup(*exec.Cmd) (processGroup, error) { return processGroup{}, nil }
+func startGroup(*process) (processGroup, error) { return processGroup{}, nil }
 
 // endGroup is called when the session is over: on Linux what a process still runs is left to
 // the system, so there is nothing to do.
@@ -86,11 +118,11 @@ func signalProcess(proc *process, name string) bool {
 		return false
 	}
 	// The group may be gone already: then there is nobody to signal.
-	_ = syscall.Kill(-proc.cmd.Process.Pid, sig)
+	_ = syscall.Kill(-proc.pid, sig)
 	return true
 }
 
 // hangUpProcess sends SIGHUP to the process's group.
 func hangUpProcess(proc *process) {
-	_ = syscall.Kill(-proc.cmd.Process.Pid, syscall.SIGHUP) // as in signalProcess
+	_ = syscall.Kill(-proc.pid, syscall.SIGHUP) // as in signalProcess
 }

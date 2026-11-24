@@ -6,14 +6,18 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/rm4n0s/cave/internal/core/pty"
 	"github.com/rm4n0s/cave/internal/core/server/servertest"
 	"github.com/rm4n0s/cave/internal/core/settings"
+	"github.com/rm4n0s/cave/internal/core/wine"
 	"github.com/rm4n0s/errors"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/sys/windows"
@@ -43,7 +47,12 @@ func TestHelperProcess(t *testing.T) {
 		if err := child.Start(); err != nil {
 			os.Exit(2)
 		}
-		_, _ = os.Stdout.WriteString(strconv.Itoa(child.Process.Pid) + "\n")
+		pid := strconv.Itoa(child.Process.Pid) + "\n"
+		if file := os.Args[i+2:]; len(file) > 0 {
+			_ = os.WriteFile(file[0], []byte(pid), 0o600) // for a session on a terminal, which has no output to read it from
+		} else {
+			_, _ = os.Stdout.WriteString(pid)
+		}
 		_ = child.Wait()
 	}
 	os.Exit(0)
@@ -265,5 +274,195 @@ func TestAShellThatCannotStartOnWindows(t *testing.T) {
 	got := f.run("echo hello", "")
 	if got.status != 255 || got.stdout != "" || !strings.Contains(got.stderr, "the session could not start") {
 		t.Errorf("%+v", got)
+	}
+}
+
+// consoleOutput collects what a session on a terminal writes, and waits for a text in it.
+type consoleOutput struct {
+	mu   sync.Mutex
+	text strings.Builder
+}
+
+func (c *consoleOutput) collect(r io.Reader) {
+	go func() {
+		buf := make([]byte, 4096)
+		for {
+			n, err := r.Read(buf)
+			c.mu.Lock()
+			c.text.Write(buf[:n])
+			c.mu.Unlock()
+			if err != nil {
+				return
+			}
+		}
+	}()
+}
+
+// waitFor waits up to ten seconds until the output holds the text, and returns the output.
+func (c *consoleOutput) waitFor(t *testing.T, want string) string {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		c.mu.Lock()
+		got := c.text.String()
+		c.mu.Unlock()
+		if strings.Contains(got, want) {
+			return got
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("after 10 s the terminal output has no %q:\n%q", want, got)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+// terminalSession opens a session with a terminal that runs cmd.exe or a command. A test that
+// needs to read the terminal's output (needsOutput) skips under Wine: Wine's ConPTY makes the
+// pseudo console but does not connect the process's standard handles to it, so cmd.exe writes its
+// prompt to the test's own output (docs/SPEC.md §13.6; docs/MANUAL-CHECKS.md has the check for a
+// Windows PC). A Wine that cannot make a pseudo console skips every test.
+func (f *winFixture) terminalSession(t *testing.T, command string, needsOutput bool) (*ssh.Session, *consoleOutput, io.WriteCloser) {
+	t.Helper()
+	if wine.Running() {
+		p, err := pty.Open(pty.Size{Cols: 80, Rows: 24}, nil)
+		if err != nil {
+			t.Skipf("Wine's ConPTY: %v", err)
+		}
+		_ = p.Close()
+		if needsOutput {
+			t.Skip("Wine's ConPTY does not connect the standard handles of the process to the pseudo console")
+		}
+	}
+	sess, err := f.client.NewSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = sess.Close() })
+	if err := sess.RequestPty("xterm-256color", 24, 80, ssh.TerminalModes{}); err != nil {
+		t.Fatal(err)
+	}
+	stdout, err := sess.StdoutPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	stdin, err := sess.StdinPipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	out := &consoleOutput{}
+	out.collect(stdout)
+	if command == "" {
+		err = sess.Shell()
+	} else {
+		err = sess.Start(command)
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sess, out, stdin
+}
+
+// ended waits for the session to end and returns its exit status.
+func ended(t *testing.T, sess *ssh.Session) int {
+	t.Helper()
+	done := make(chan error, 1)
+	go func() { done <- sess.Wait() }()
+	select {
+	case err := <-done:
+		var exitErr *ssh.ExitError
+		switch {
+		case err == nil:
+			return 0
+		case errors.As(err, &exitErr):
+			return exitErr.ExitStatus()
+		}
+		t.Fatalf("the session ended with %v", err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("the session did not end")
+	}
+	return -1
+}
+
+func TestShellOnATerminalOnWindows(t *testing.T) {
+	f := newWinFixture(t)
+	sess, out, stdin := f.terminalSession(t, "", true)
+	if _, err := io.WriteString(stdin, "echo marker-%CAVE_PERSON%\r"); err != nil {
+		t.Fatal(err)
+	}
+	out.waitFor(t, "marker-alice")
+	if _, err := io.WriteString(stdin, "echo term-%TERM%\r"); err != nil {
+		t.Fatal(err)
+	}
+	out.waitFor(t, "term-xterm-256color")
+	if _, err := io.WriteString(stdin, "exit 5\r"); err != nil {
+		t.Fatal(err)
+	}
+	if status := ended(t, sess); status != 5 {
+		t.Errorf("the exit status is %d, want 5", status)
+	}
+}
+
+func TestExitStatusOnATerminalOnWindows(t *testing.T) {
+	f := newWinFixture(t)
+	sess, _, _ := f.terminalSession(t, "exit 5", false)
+	if status := ended(t, sess); status != 5 {
+		t.Errorf("the exit status is %d, want 5", status)
+	}
+}
+
+func TestWindowChangeOnWindows(t *testing.T) {
+	f := newWinFixture(t)
+	sess, _, _ := f.terminalSession(t, helperCommand("sleep"), false)
+	type size struct{ Cols, Rows, Width, Height uint32 }
+	for _, tt := range []struct {
+		size size
+		want bool
+	}{{size{132, 43, 0, 0}, true}, {size{100, 0, 0, 0}, true}, {size{0, 0, 0, 0}, true}, {size{5000, 24, 0, 0}, false}} {
+		ok, err := sess.SendRequest("window-change", true, ssh.Marshal(tt.size))
+		if err != nil || ok != tt.want {
+			t.Errorf("window-change %+v: granted %v (error %v), want %v", tt.size, ok, err, tt.want)
+		}
+	}
+	if err := sess.Signal(ssh.SIGKILL); err != nil {
+		t.Fatal(err)
+	}
+	if status := ended(t, sess); status != 1 {
+		t.Errorf("the exit status is %d, want 1", status)
+	}
+}
+
+func TestClosingTheChannelEndsTheProcessOnATerminal(t *testing.T) {
+	f := newWinFixture(t)
+	pidFile := filepath.Join(t.TempDir(), "pid")
+	sess, _, _ := f.terminalSession(t, helperCommand("spawn")+" "+quoteWindowsArg(pidFile), false)
+	var pid uint32
+	deadline := time.Now().Add(10 * time.Second)
+	for pid == 0 {
+		if data, err := os.ReadFile(pidFile); err == nil && strings.HasSuffix(string(data), "\n") {
+			n, err := strconv.Atoi(strings.TrimSpace(string(data)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			pid = uint32(n)
+		} else if time.Now().After(deadline) {
+			t.Fatal("the helper did not write the process id of its child")
+		} else {
+			time.Sleep(20 * time.Millisecond)
+		}
+	}
+	if !processAlive(pid) {
+		t.Fatalf("the second helper %d is not running", pid)
+	}
+	_ = sess.Close()
+	deadline = time.Now().Add(5 * time.Second)
+	for processAlive(pid) {
+		if time.Now().After(deadline) {
+			if h, err := windows.OpenProcess(windows.PROCESS_TERMINATE, false, pid); err == nil {
+				_ = windows.TerminateProcess(h, 1) // do not leave it behind
+				_ = windows.CloseHandle(h)
+			}
+			t.Fatalf("the second helper %d is still running 5 seconds after its session ended", pid)
+		}
+		time.Sleep(20 * time.Millisecond)
 	}
 }
