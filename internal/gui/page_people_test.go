@@ -3,7 +3,6 @@ package gui
 import (
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/rm4n0s/errors"
 	"github.com/rm4n0s/glutter/foundation"
@@ -429,15 +428,6 @@ func TestPeopleWithTheRealApplication(t *testing.T) {
 	}
 	tapKey(tester, confirmYesKey)
 	sync("dave is removed", func() bool { return len(r.App.People()) == 0 })
-	done := make(chan struct{})
-	go func() {
-		_ = client.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-	case <-time.After(10 * time.Second):
-		t.Error("the client is still connected after dave was removed")
-	}
+	closedClient(t, client)
 	sync("the page says Nobody yet.", func() bool { return tester.Exists(gluttertest.ByText("Nobody yet.")) })
 }

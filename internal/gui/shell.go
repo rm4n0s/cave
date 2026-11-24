@@ -59,7 +59,7 @@ func (s *shell) Build(bc m.BuildContext) m.Widget {
 					}),
 					m.NewVerticalDivider(m.VerticalDividerOpts{Width: foundation.Some(1.0)}),
 					m.NewExpanded(page),
-				}),
+				}, m.RowOpts{CrossAxisAlignment: m.CrossAxisAlignmentStretch}),
 			})
 		}
 		return m.NewScaffold(m.ScaffoldOpts{

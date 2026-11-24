@@ -2,6 +2,7 @@ package gui
 
 import (
 	"context"
+	"golang.org/x/crypto/ssh"
 	"testing"
 	"time"
 
@@ -70,4 +71,32 @@ func eventually(t *testing.T, tester *gluttertest.Tester, what string, cond func
 func tapKey(tester *gluttertest.Tester, key foundation.Key) {
 	tester.Tap(gluttertest.ByKey(key))
 	tester.PumpAndSettle()
+}
+
+// pumpGoroutines is pump with the real runner: a command runs on a goroutine and is given back
+// through the tester's posted functions. A test that waits for something away from the UI thread
+// (the file dialog) needs it; it then uses eventually to wait.
+func pumpGoroutines(t *testing.T, a App, size ui.Size, page string) *gluttertest.Tester {
+	t.Helper()
+	tester := testutil.NewTester(t, size)
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	tester.PumpWidget(newRoot(ctx, a, Options{Page: page, Version: "0.0.0-test"}, newRunner(ctx, tester.Binding.Post)))
+	tester.PumpAndSettle()
+	return tester
+}
+
+// closedClient waits until the connection of an ssh client has ended.
+func closedClient(t *testing.T, client *ssh.Client) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		_ = client.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("the connection is still open")
+	}
 }

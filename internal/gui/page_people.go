@@ -101,7 +101,7 @@ func (s *peopleState) Build(bc m.BuildContext) m.Widget {
 		m.NewSizedBox(list, m.SizedBoxOpts{Width: foundation.Some(listWidth)}),
 		m.NewVerticalDivider(m.VerticalDividerOpts{Width: foundation.Some(1.0)}),
 		m.NewExpanded(pane),
-	})
+	}, m.RowOpts{CrossAxisAlignment: m.CrossAxisAlignmentStretch})
 }
 
 // nobody is the page when there is nobody yet.
@@ -225,71 +225,4 @@ func removeQuestion(v *view, p people.Person) string {
 		text += " This closes " + plural(n, "connection") + "."
 	}
 	return text
-}
-
-// personPane is one person: for now the name, and Rename and Remove. It reads the view itself,
-// because on a narrow window it is a page of its own, made by the navigator.
-type personPane struct {
-	m.StatelessWidget
-	id string
-	// page says that the pane is a page of its own, with a bar and a back button.
-	page bool
-}
-
-func newPersonPane(id string, page bool) *personPane {
-	return &personPane{StatelessWidget: m.NewStatelessWidgetBase(), id: id, page: page}
-}
-
-// Build shows the person, or that they are gone.
-func (w *personPane) Build(bc m.BuildContext) m.Widget {
-	v := viewOf(bc)
-	theme := m.ThemeOf(bc)
-	p, ok := findPerson(v, w.id)
-	title, body := "Person", m.Widget(m.NewCenter(m.NewText("This person is gone.", m.TextOpts{Style: theme.TextTheme.BodyLarge})))
-	if ok {
-		title = p.Name
-		body = column([]m.Widget{
-			m.NewText(p.Name, m.TextOpts{Key: foundation.NewKey("pane-name"), Style: theme.TextTheme.HeadlineMedium}),
-			gap(16),
-			m.NewRow([]m.Widget{
-				m.NewOutlinedButton(func() { renamePerson(bc, v, p) }, m.NewText("Rename"), m.OutlinedButtonOpts{Key: renamePersonKey}),
-				hgap(12),
-				m.NewOutlinedButton(func() { removePerson(bc, v, p, w.page) }, m.NewText("Remove"), m.OutlinedButtonOpts{
-					Key: removePersonKey,
-					Style: m.OutlinedButtonStyleFrom(m.ButtonStyleFromOpts{
-						ForegroundColor: foundation.Some(theme.ColorScheme.Error()),
-					}),
-				}),
-			}),
-		})
-	}
-	if !w.page {
-		return body
-	}
-	return m.NewScaffold(m.ScaffoldOpts{
-		AppBar: m.NewAppBar(m.AppBarOpts{Title: m.NewText(title)}),
-		Body:   body,
-	})
-}
-
-// renamePerson opens the dialog that changes a person's name.
-func renamePerson(bc m.BuildContext, v *view, p people.Person) {
-	showForm(bc, v.run, "Rename "+p.Name, "Rename", []fieldSpec{nameField(p.Name)},
-		textAction(func(ctx context.Context, name string) error { return v.app.RenamePerson(ctx, p.ID, name) }))
-}
-
-// removePerson asks, and removes the person. On a page of its own it goes back afterwards.
-func removePerson(bc m.BuildContext, v *view, p people.Person, page bool) {
-	answer := confirm(bc, "Remove person", removeQuestion(v, p), "Remove", true)
-	waitYes(bc, answer, func() {
-		v.run(func(ctx context.Context) error { return v.app.RemovePerson(ctx, p.ID) }, func(err error) {
-			if err != nil {
-				showSnack(bc, app.Message(err))
-				return
-			}
-			if page {
-				m.NavigatorPop(bc)
-			}
-		})
-	})
 }
