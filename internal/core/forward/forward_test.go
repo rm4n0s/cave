@@ -98,6 +98,16 @@ func newFixture(t *testing.T, dial Dialer) *fixture {
 	return f
 }
 
+// stop stops the server.
+func (f *fixture) stop() {
+	f.t.Helper()
+	ctx, cancel := context.WithTimeout(context.Background(), servertest.WaitFor)
+	defer cancel()
+	if err := f.Server.Stop(ctx); err != nil {
+		f.t.Fatal(err)
+	}
+}
+
 // target returns the network and address of the last connection Cave tried to make.
 func (f *fixture) target() string {
 	f.mu.Lock()

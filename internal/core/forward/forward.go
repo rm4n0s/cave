@@ -1,6 +1,8 @@
 // Package forward serves TCP port forwarding (docs/SPEC.md §9.8). A direct-tcpip channel
 // ("ssh -L", "ssh -D") is a connection Cave makes for the client to a host and port the client
-// names, with the bytes copied both ways.
+// names, with the bytes copied both ways. A tcpip-forward request ("ssh -R") makes Cave listen
+// on a port for the client: each connection that arrives there is carried to the client over a
+// forwarded-tcpip channel.
 package forward
 
 import (
@@ -26,6 +28,8 @@ import (
 const (
 	TagDialFailed   = "ForwardDialFailed"
 	TagDialTimedOut = "ForwardDialTimedOut"
+	TagListenFailed = "ForwardListenFailed"
+	TagAcceptFailed = "ForwardAcceptFailed"
 )
 
 const (
@@ -35,14 +39,22 @@ const (
 	maxHost = 255
 	// maxPort is the highest port there is.
 	maxPort = 65535
+	// MaxListeners is how many ports one connection may have Cave listen on.
+	MaxListeners = 32
+	// MaxForwarded is how many connections that arrived at those ports one connection may have
+	// open at once; one more is closed as it arrives.
+	MaxForwarded = 256
 )
 
 // Dialer connects to an address, as net.Dialer.DialContext does.
 type Dialer func(ctx context.Context, network, address string) (net.Conn, error)
 
-// Options are what the forwarding handlers need. Every field but Dial is required.
+// Listener listens on an address, as net.Listen does.
+type Listener func(network, address string) (net.Listener, error)
+
+// Options are what the forwarding handlers need. Every field but Dial and Listen is required.
 type Options struct {
-	// Settings has forwarding.local.
+	// Settings has forwarding.local, forwarding.remote and forwarding.gatewayPorts.
 	Settings *settings.Store
 	// Clock times the limit of a connection attempt.
 	Clock clock.Clock
@@ -50,11 +62,17 @@ type Options struct {
 	Logger *slog.Logger
 	// Dial connects to what a client asked for; nil is the system's dialer.
 	Dial Dialer
+	// Listen listens where a client asked Cave to; nil is net.Listen.
+	Listen Listener
 }
 
 // handler serves the channels and requests of forwarding.
 type handler struct {
 	opts Options
+
+	// remotes are the ports Cave listens on for each connection, by the connection's id.
+	mu      sync.Mutex
+	remotes map[string]*remote
 }
 
 // Register makes the server serve port forwarding.
@@ -62,8 +80,13 @@ func Register(srv *server.Server, opts Options) {
 	if opts.Dial == nil {
 		opts.Dial = (&net.Dialer{}).DialContext
 	}
-	h := &handler{opts: opts}
+	if opts.Listen == nil {
+		opts.Listen = net.Listen
+	}
+	h := &handler{opts: opts, remotes: map[string]*remote{}}
 	srv.HandleChannel("direct-tcpip", h.direct)
+	srv.HandleRequest("tcpip-forward", h.listen)
+	srv.HandleRequest("cancel-tcpip-forward", h.cancel)
 }
 
 // validHost says whether a client may name a host: a name or an address of printable ASCII

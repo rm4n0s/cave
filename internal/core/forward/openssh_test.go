@@ -163,3 +163,60 @@ func TestOpenSSHLocalForwardIsRefusedWhenTurnedOff(t *testing.T) {
 		_ = os.Remove(socket) // ssh was killed before it could remove its socket
 	}
 }
+
+func TestOpenSSHRemoteForward(t *testing.T) {
+	echo := startEcho(t, "tcp4")
+	f := newFixture(t, nil)
+	o := f.OpenSSH()
+	// Port 0: Cave lets the system choose. ssh is told the port; the test reads it from the
+	// registry, which shows what Cave listens on.
+	stop := o.Start("alice", f.key, "-o", "ExitOnForwardFailure=yes", "-R", "0:"+echo.addr)
+	address := f.remoteForwards(1)[0]
+	if !strings.HasPrefix(address, "127.0.0.1:") {
+		t.Fatalf("Cave listens on %s, want a port of 127.0.0.1", address)
+	}
+
+	conn, err := net.Dial("tcp", address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+	exchange(t, conn, "through ssh -R")
+	if err := conn.(*net.TCPConn).CloseWrite(); err != nil {
+		t.Fatal(err)
+	}
+	if err := conn.SetReadDeadline(time.Now().Add(servertest.WaitFor)); err != nil {
+		t.Fatal(err)
+	}
+	if rest, err := io.ReadAll(conn); err != nil || string(rest) != "bye" {
+		t.Errorf("after the end of sending %q came back, %v", rest, err)
+	}
+	if echo.accepted.Load() != 1 {
+		t.Errorf("the echo server got %d connections", echo.accepted.Load())
+	}
+	t.Logf("Cave listened on a port of 127.0.0.1 for ssh; a message sent there reached the echo server behind ssh and came back")
+
+	// ssh ends: Cave stops listening.
+	if stderr := stop(); stderr != "" {
+		t.Errorf("ssh wrote %q", stderr)
+	}
+	f.remoteForwards(0)
+	refused(t, address)
+}
+
+func TestOpenSSHRemoteForwardIsRefusedWhenTurnedOff(t *testing.T) {
+	echo := startEcho(t, "tcp4")
+	f := newFixture(t, nil)
+	f.Set(string(settings.ForwardingRemote), false)
+	o := f.OpenSSH()
+	// With ExitOnForwardFailure, ssh gives up when Cave refuses to listen.
+	got := o.SSH("", "alice", f.key, []string{"-N", "-o", "ExitOnForwardFailure=yes", "-R", "0:" + echo.addr})
+	if got.ExitCode == 0 || !strings.Contains(got.Stderr, "remote port forwarding failed") {
+		t.Errorf("ssh -R with forwarding.remote off: %+v", got)
+	}
+	f.remoteForwards(0)
+	if echo.accepted.Load() != 0 {
+		t.Errorf("the echo server got %d connections", echo.accepted.Load())
+	}
+	t.Logf("with forwarding.remote off, ssh reports: %s", strings.TrimSpace(got.Stderr))
+}
