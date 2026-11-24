@@ -71,3 +71,14 @@ One entry per finished step of `docs/IMPLEMENTATION.md`, newest last. Format:
 - **Proof**: [0.5-wine-storage.txt](implemented-proof-images/0.5-wine-storage.txt), the transcript of the storage tests under Wine.
 - **Manual checks**: none
 - **Glutter issues**: none
+
+## Step 1.1: Settings
+- **Date**: 2026-11-24
+- **Branch**: feat/step-1.1-settings
+- **Summary**: `internal/core/settings`: the sixteen settings of SPEC §6 as one table (`Schema`), typed keys and getters (`Bool`, `Int`, `String`, `Strings`, so a getter of the wrong kind does not compile), and `Store`: `Open` reads `settings.json`, `Set` validates, writes the file atomically and then tells the listeners, `Snapshot` is an immutable view. `MatchEnvName` matches the patterns of `session.acceptEnv`. `internal/core/errtest.Route` is the route assertion shared by the tests from here on.
+- **Decisions**: a bad value in the file is `SettingsFileValueInvalid` and a bad value given to `Set` is `SettingInvalid` (a Tag is created at one place; SPEC §6 updated). The file holds only the settings that were set, and setting a value a setting already has does nothing (no write, no event). Any version other than 1 is refused, a missing one included. `server.address` takes an IP literal without a zone; `session.acceptEnv` takes at most 64 patterns of letters, digits, `_` and `*`; `session.shell` at most 4096 bytes without NUL. A whole number in the file may be written `2022.0`.
+- **Checks**: `scripts/checks.sh` passed, every check (gofmt, vet for Linux and Windows, golangci-lint 0 issues, race tests as a debug build, cgo-free build and tests, Windows build, error tags: none untested, the Wine run of `internal/core/storage`).
+- **Tests**: the defaults against the table of SPEC §6; set and reopen; 38 bad values covering every setting, none of which changes the value, writes the file or tells a listener; unknown keys kept through a rewrite; twelve broken files refused and left byte for byte; the same value set twice; listeners' order and cancel; a write that fails and a state that cannot be encoded; four goroutines setting at once under the race detector; 25 pattern cases, with one that would blow up a naive matcher.
+- **Proof**: none
+- **Manual checks**: none
+- **Glutter issues**: none

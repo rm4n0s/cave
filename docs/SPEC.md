@@ -119,7 +119,7 @@ Files are written atomically: a temporary file in the same folder with mode `060
 
 ## 6. Settings
 
-`settings.json`: `{"version":1,"settings":{"server.port":2222, ...}}`. Unknown keys are kept when the file is rewritten. A value of the wrong type or out of range is an error at load (`SettingInvalid`, with the key), and is refused when set.
+`settings.json`: `{"version":1,"settings":{"server.port":2222, ...}}`. Unknown keys are kept when the file is rewritten. A value of the wrong type or out of range is an error at load (`SettingsFileValueInvalid`, with the key), and is refused when set (`SettingInvalid`; an unknown name is `SettingUnknown`). The file holds only the settings that were set; the others follow the defaults. Setting a value that a setting already has changes nothing.
 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
