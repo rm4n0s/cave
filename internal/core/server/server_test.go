@@ -25,6 +25,8 @@ import (
 	"github.com/rm4n0s/cave/internal/core/storage/storagetest"
 	"github.com/rm4n0s/errors"
 	"golang.org/x/crypto/ssh"
+	"sync/atomic"
+	"syscall"
 )
 
 var ctx = context.Background()
@@ -931,5 +933,96 @@ func TestOpenSSHIsRefusedAndAccepted(t *testing.T) {
 	}
 	if want := []string{"accepted:alice", "unknownName:mallory", "wrongKey:alice"}; !reflect.DeepEqual(outcomes, want) {
 		t.Errorf("outcomes = %v, want %v", outcomes, want)
+	}
+}
+
+func TestRelistenKeepsTheConnections(t *testing.T) {
+	f := newStopped(t)
+	// The address follows a variable of the test, as it follows the settings in the app.
+	address := "127.0.0.1:0"
+	f.server.opts.Address = func(settings.Snapshot) string { return address }
+	// On a server that is not running, nothing happens.
+	if err := f.server.Relisten(ctx); err != nil || f.server.State() != Stopped {
+		t.Fatalf("Relisten on a stopped server: %v, state %v", err, f.server.State())
+	}
+	f.start()
+	_, key := f.person("alice")
+	client := f.connect("alice", key)
+	oldAddr := f.addr
+	var changes atomic.Int64
+	f.server.Subscribe(func(change Change) {
+		if change == StateChanged {
+			changes.Add(1)
+		}
+	})
+
+	if err := f.server.Relisten(ctx); err != nil {
+		t.Fatal(err)
+	}
+	newAddr := f.server.Addrs()[0].String()
+	if newAddr == oldAddr || f.server.State() != Running {
+		t.Fatalf("after Relisten the server listens on %s (before: %s), state %v", newAddr, oldAddr, f.server.State())
+	}
+	if changes.Load() == 0 {
+		t.Error("the listeners were not told")
+	}
+	// The connection that was established is still there.
+	if _, _, err := client.SendRequest("keepalive@openssh.com", true, nil); err != nil {
+		t.Errorf("the established connection was closed: %v", err)
+	}
+	if conns := f.server.Connections(); len(conns) != 1 {
+		t.Errorf("the registry has %d connections", len(conns))
+	}
+	// The old address takes nobody, the new one does.
+	if conn, err := net.DialTimeout("tcp", oldAddr, time.Second); err == nil {
+		_ = conn.Close()
+		t.Error("the old address still takes connections")
+	}
+	f.addr = newAddr
+	second := f.connect("alice", key)
+	if _, _, err := second.SendRequest("keepalive@openssh.com", true, nil); err != nil {
+		t.Errorf("the new address: %v", err)
+	}
+	// Stop ends them all, old and new.
+	stopCtx, cancel := context.WithTimeout(ctx, waitFor)
+	defer cancel()
+	if err := f.server.Stop(stopCtx); err != nil {
+		t.Fatal(err)
+	}
+	waitGone(t, client)
+	waitGone(t, second)
+}
+
+func TestRelistenOnAnAddressThatIsTakenStopsTheServer(t *testing.T) {
+	f := newStopped(t)
+	address := "127.0.0.1:0"
+	f.server.opts.Address = func(settings.Snapshot) string { return address }
+	f.start()
+	_, key := f.person("alice")
+	client := f.connect("alice", key)
+
+	// Somebody else has the address the settings now name.
+	taken, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = taken.Close() }()
+	address = taken.Addr().String()
+
+	err = f.server.Relisten(ctx)
+	meta := errtest.Route(t, err, "Server.Relisten.ServerRelistenFailed")
+	if meta["address"] != address || !errors.Is(err, syscall.EADDRINUSE) {
+		t.Errorf("metadata = %v, cause %v", meta, errors.Unwrap(err))
+	}
+	// The server is stopped, as when it cannot start: no listener, no connection.
+	if f.server.State() != Stopped || len(f.server.Addrs()) != 0 {
+		t.Errorf("state %v, addresses %v", f.server.State(), f.server.Addrs())
+	}
+	waitGone(t, client)
+	f.waitConnections(0)
+	// It starts again when the address is free.
+	address = "127.0.0.1:0"
+	if err := f.server.Start(ctx); err != nil || f.server.State() != Running {
+		t.Errorf("Start afterwards: %v, state %v", err, f.server.State())
 	}
 }

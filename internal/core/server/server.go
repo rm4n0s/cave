@@ -25,6 +25,7 @@ import (
 const (
 	TagStartCancelled = "ServerStartCancelled"
 	TagListenFailed   = "ListenFailed"
+	TagRelistenFailed = "ServerRelistenFailed"
 	TagStopTimedOut   = "ServerStopTimedOut"
 	TagAcceptFailed   = "ServerAcceptFailed"
 )
@@ -254,7 +255,9 @@ func (s *Server) Stop(ctx context.Context) error {
 	s.notify(StateChanged)
 
 	// Closing is how the goroutines are told to end; a close that fails leaves nothing to do.
-	_ = listener.Close()
+	if listener != nil { // nil when a new address could not be listened on (Relisten)
+		_ = listener.Close()
+	}
 	for _, conn := range open {
 		_ = conn.Close()
 	}
@@ -272,6 +275,40 @@ func (s *Server) Stop(ctx context.Context) error {
 	s.opts.Logger.Info("stopped")
 	s.setState(Stopped)
 	return err
+}
+
+// Relisten makes a running server listen on the address the settings have now, and keeps the
+// connections that are established: it is what a change of server.port or server.address does
+// (docs/SPEC.md §6). On a server that is not running it does nothing. The old listener is closed
+// first, because the new address may be one it holds. When the new address cannot be listened
+// on (ServerRelistenFailed, with the address in the metadata), the server is stopped, as when it
+// cannot start.
+func (s *Server) Relisten(ctx context.Context) error {
+	s.mu.Lock()
+	if s.state != Running {
+		s.mu.Unlock()
+		return nil
+	}
+	old := s.listener
+	s.listener = nil // the loop that accepts from it sees that it is not the listener any more
+	s.mu.Unlock()
+	_ = old.Close() // a listener that is closed already is fine
+
+	address := s.address()
+	listener, err := s.listen(ctx, address)
+	if err != nil {
+		s.opts.Logger.Warn("the new address cannot be listened on", "address", address)
+		_ = s.Stop(ctx) // its error would be about the wait; the one that matters is this one
+		return errors.NewErr(TagRelistenFailed, err).SetMetadata("address", address)
+	}
+	s.mu.Lock()
+	s.listener = listener
+	s.running.Add(1)
+	s.mu.Unlock()
+	s.opts.Logger.Info("listening", "address", listener.Addr().String())
+	go s.accept(listener)
+	s.notify(StateChanged)
+	return nil
 }
 
 // accept takes connections from the listener until it is closed.

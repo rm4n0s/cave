@@ -142,7 +142,9 @@ Files are written atomically: a temporary file in the same folder with mode `060
 
 A change takes effect at once. Changing `server.port` or `server.address` while the server runs restarts the listener and keeps the established connections; if the new address cannot be listened on, the server stops with that error shown (§9.1). Turning a feature off (`sftp.enabled`, `forwarding.*`) refuses new uses and leaves running ones.
 
-Flags for one run, never saved: `--port <n>`, `--no-start` (do not start the server at launch).
+Flags for one run, never saved: `--port <n>` (1 to 65535; it takes the place of `server.port` until that setting is changed in the same run: a port the user then chooses is the one used), `--no-start` (do not start the server at launch).
+
+When a new `server.port` or `server.address` moves the listener, the old listener is closed first, because the new address may be one it holds (the same port on another address). A change of these settings while the server is stopped only saves them.
 
 ## 7. People, keys and authentication
 
@@ -393,6 +395,11 @@ Every `server.keepAliveSeconds`, Cave looks at what arrived from each connection
 - **Commands**: `StartServer`, `StopServer`; `AddPerson`, `RenamePerson`, `SetPersonEnabled`, `RemovePerson`, `AddKeys` (text), `ImportKeys` (file), `SetKeyComment`, `RemoveKey`; `ClearAttempts`, `RemoveAttempt`; `Disconnect`; `Set` (one setting); `NewHostKey`. Each returns an `error` with a Tag the UIs turn into a sentence.
 - **Events**: `Subscribe(func(Event)) (cancel func())`. `Changed{Topics}` (a set of `Server`, `People`, `Attempts`, `Connections`, `Settings`), coalesced to at most one every 100 ms; `Accepted{person, address}` and `Rejected{entry}` for notifications.
 - `app.Messages` turns an error Tag into the sentence shown to the user (one table for both UIs); an unknown Tag shows the error's own message.
+- **Opening.** Root is refused before anything is touched (§9.1). A failure after that (the lock is held: `AlreadyRunning`; a file that does not parse; a folder that cannot be made) is returned with everything released: no lock, no listener. A server that cannot start is not such a failure: the application opens with the server stopped and the reason in the `Server()` snapshot, so that the user can choose another port.
+- **`Server()`**: `Err` is why the server is not running although it was asked to (a failed start, or a failed move of the listener), and is cleared by a start that works and by `StopServer`. `Port` is the listener's port, or the one it would use. `Addresses` is the one address of `server.address` when that is set, else this computer's addresses (`netinfo`: those of the interfaces that are up, IPv4 before IPv6, loopback last, link-local IPv6 left out). `Command(person, address)` is the line to give a person; the port 22 is not written.
+- **`Set`** saves the setting and does what the change asks for at once. When the effect fails (a port that cannot be listened on), the setting stays saved, the failure is returned and `Server()` keeps it.
+- **`Changed`** is sent 100 ms after the first change the subscribers have not been told of, with every topic that changed meanwhile; nothing is sent after `Close`.
+- **Flags** (`app.Flags`, the same for both programs): `--config-dir`, `--state-dir`, `--port`, `--no-start`, `--allow-root`, `--log-level`, `--version`, and `--help`, which prints them.
 
 ## 11. The desktop app (`cave`)
 
