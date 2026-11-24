@@ -30,6 +30,7 @@ var messages = map[string]string{
 	"FlagsHelp":               "Run with --help to see the flags.",
 	"FlagsUnexpectedArgument": "Cave takes flags only, not {argument}. Run with --help to see them.",
 	"FlagsPortInvalid":        "A port is a number from 1 to 65535, not {port}.",
+	"FlagsPageInvalid":        "There is no page named {page}. The pages are overview, people, attempts, connections and settings.",
 
 	// People and keys.
 	"PersonNameInvalid":  "A name has 1 to 32 letters, digits, dots, underscores or hyphens, and does not start with a dot or a hyphen.",

@@ -4,9 +4,11 @@ import (
 	"flag"
 	"io"
 	"log/slog"
+	"slices"
 	"strings"
 
 	"github.com/rm4n0s/cave/internal/core/logging"
+	"github.com/rm4n0s/cave/internal/core/sanitize"
 	"github.com/rm4n0s/cave/internal/core/storage"
 	"github.com/rm4n0s/errors"
 )
@@ -17,7 +19,12 @@ const (
 	TagFlagsUnexpectedArgument = "FlagsUnexpectedArgument"
 	TagFlagsPortInvalid        = "FlagsPortInvalid"
 	TagFlagsHelp               = "FlagsHelp"
+	TagFlagsPageInvalid        = "FlagsPageInvalid"
 )
+
+// Pages are the names of the pages of both user interfaces, in the order they are shown; --page
+// takes one of them. It is never changed.
+var Pages = []string{"overview", "people", "attempts", "connections", "settings"}
 
 // Flags are the flags both programs take (docs/SPEC.md §5.1, §6, §9.1, §15, §16).
 type Flags struct {
@@ -33,6 +40,8 @@ type Flags struct {
 	LogLevel slog.Level
 	// Version is --version: print the version and do nothing else.
 	Version bool
+	// Page is --page: the page the user interface shows first, one of Pages; "" when not given.
+	Page string
 }
 
 // flagSet is the flag set of a program, writing into f and level.
@@ -46,6 +55,7 @@ func flagSet(program string, f *Flags, level *string) *flag.FlagSet {
 	fs.BoolVar(&f.AllowRoot, "allow-root", false, "run although the user is root: every person gets a root shell")
 	fs.StringVar(level, "log-level", "info", "what the log has: debug, info, warn or error")
 	fs.BoolVar(&f.Version, "version", false, "print the version and exit")
+	fs.StringVar(&f.Page, "page", "", "the `page` to show first: "+strings.Join(Pages, ", "))
 	return fs
 }
 
@@ -86,6 +96,9 @@ func ParseFlags(program string, args []string) (Flags, error) {
 	if portGiven && (f.Port < 1 || f.Port > 65535) {
 		return Flags{}, errors.New(TagFlagsPortInvalid, "a port is a number from 1 to 65535", "port", f.Port)
 	}
+	if f.Page != "" && !slices.Contains(Pages, f.Page) {
+		return Flags{}, errors.New(TagFlagsPageInvalid, "there is no such page", "page", sanitize.Display(f.Page, 32))
+	}
 	parsed, err := logging.ParseLevel(level)
 	if err != nil {
 		return Flags{}, err
@@ -104,4 +117,19 @@ func (f Flags) Options(program string, env storage.Env) (Options, error) {
 	return Options{
 		Program: program, Dirs: dirs, LogLevel: f.LogLevel, Port: f.Port, NoStart: f.NoStart, AllowRoot: f.AllowRoot,
 	}, nil
+}
+
+// IsUsageError says whether err is a command line that cannot be used (an unknown flag, a value
+// out of range, an argument where only flags are taken), for which the programs exit with the
+// status 2 instead of 1. Help is not one.
+func IsUsageError(err error) bool {
+	appErr, ok := errors.FromError(err)
+	if !ok {
+		return false
+	}
+	switch appErr.Tag {
+	case TagFlagsInvalid, TagFlagsUnexpectedArgument, TagFlagsPortInvalid, TagFlagsPageInvalid, logging.TagLevelInvalid:
+		return true
+	}
+	return false
 }

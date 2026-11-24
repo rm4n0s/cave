@@ -1,0 +1,33 @@
+{
+ "version": 1,
+ "people": [
+  {
+   "id": "p_00000000000000a1",
+   "name": "alice",
+   "enabled": true,
+   "createdAt": "2026-11-20T10:00:00Z",
+   "keys": [
+    {
+     "id": "k_00000000000001a1",
+     "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA/rsNPrekwTOVAOlxaHYRtUm4WizdK1VRR0JISHFo6n",
+     "comment": "laptop",
+     "addedAt": "2026-11-20T10:01:00Z"
+    }
+   ]
+  },
+  {
+   "id": "p_00000000000000b2",
+   "name": "bob",
+   "enabled": false,
+   "createdAt": "2026-11-21T09:00:00Z",
+   "keys": [
+    {
+     "id": "k_00000000000002b1",
+     "key": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIA67rQ5tr9uGI5qNdUi1bhRzGP3RjD3dcSVMWAW2Crmo",
+     "comment": "",
+     "addedAt": "2026-11-21T09:01:00Z"
+    }
+   ]
+  }
+ ]
+}

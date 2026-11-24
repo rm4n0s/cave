@@ -45,6 +45,9 @@ var allowedDependencies = []string{
 	"golang.org/x/sys",
 	"charm.land/bubbletea/v2",
 	"charm.land/lipgloss/v2",
+	// What Bubble Tea and Lip Gloss bring in, which the terminal UI uses for cell widths and for
+	// cutting text that holds styles (CLAUDE.md: "and what these bring in").
+	"github.com/charmbracelet/x/ansi",
 }
 
 // charmPrefixes are the import path prefixes of Bubble Tea, Lip Gloss and the rest of Charm.

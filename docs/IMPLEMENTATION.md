@@ -97,7 +97,7 @@ This file breaks the milestones in `docs/SPEC.md` §18 into small steps. Each st
 | | Method | How |
 |---|---|---|
 | T | Transcript | The verbose output of the named Go tests, saved as text: `scripts/transcript.sh <out.txt> -- go test -v -count=1 -run <pattern> <package>` (step 0.5). It removes temporary paths and timings, so the file is stable |
-| U | TUI capture | `scripts/tui-proof.sh <out.txt> [--config <fixture dir>] [--size 100x30] [--during '<command>'] [--keys '<tmux keys>' \| --wait '<regex>']... -- [tcave args]` (step 5.1): the TUI runs isolated in a private `tmux` server on a loopback port the system chose, gets the keys, and the screen is saved as text |
+| U | TUI capture | `scripts/tui-proof.sh <out.txt> [--config <fixture dir>] [--size 100x30] [--during '<command>'] [--keys '<tmux keys>' \| --text '<text>' \| --wait '<regex>']... -- [tcave args]` (step 5.1): the TUI runs isolated in a private `tmux` server on a loopback port the system chose, gets the keys, and the screen is saved as text |
 | G | Golden | A golden file made by a `Golden` test (PNG through Glutter's software renderer, text for the TUI), copied to the proofs folder by the step's command |
 | D | Desktop screenshot | `scripts/proof.sh <out.png> [--config <fixture dir>] [--size 960x640] [--during '<command>'] [--after <seconds>] -- [cave args]` (step 6.1): the desktop app runs isolated in a headless compositor and `grim` saves the screen |
 | W | Wine screenshot | `scripts/wine-proof.sh <out.png> [--config <fixture dir>] [--after <seconds>] -- [cave args]` (step 7.5): the same for the Windows program under Wine |
@@ -670,7 +670,7 @@ Each of these cost time once already. Read the list before a step and again when
 11. The proof fixture `scripts/testdata/two-people/`: `settings.json` with `"server.address": "127.0.0.1"` and `"session.shell": "/bin/sh"` (a session of a proof runs `/bin/sh` in the isolated home, never the user's shell); `people.json` with `alice` (enabled) and `bob` (disabled), each with one public key; a host key (`ssh_host_ed25519_key` and its `.pub`); `client-keys/alice` and `client-keys/mallory` (private keys for the proofs of later steps). Make the keys with `ssh-keygen -t ed25519 -N '' -C test -f <file>` inside the fixture. Add a `README` that says: these keys were generated for the proofs and tests, are used nowhere else, and protect nothing.
 12. `scripts/tui-proof.sh` (method U). Usage:
     ```
-    scripts/tui-proof.sh <out.txt> [--config <fixture dir>] [--size 100x30] [--during '<command>'] [--keys '<tmux keys>' | --wait '<regex>']... -- [tcave args]
+    scripts/tui-proof.sh <out.txt> [--config <fixture dir>] [--size 100x30] [--during '<command>'] [--keys '<tmux keys>' | --text '<text>' | --wait '<regex>']... -- [tcave args]
     ```
     What it does, in this order:
     1. Builds `tcave` into a temporary folder (`go build -o`).
@@ -679,7 +679,7 @@ Each of these cost time once already. Read the list before a step and again when
     4. Starts a private tmux server, with `TMUX_TMPDIR` set to the script's temporary folder and `-f /dev/null`, so that the user's own tmux and its configuration are never touched: `tmux -L cave-proof-$$ -f /dev/null new-session -d -x <cols> -y <rows> -- timeout -k 2 120 scripts/isolated.sh --config <copy> -- <tcave> --port <port> <tcave args>`.
     5. Polls `tmux -L … capture-pane -p` until the screen has the word `Cave` (10 seconds at most, else it fails and prints the screen).
     6. With `--during`: runs the command in the background, under `timeout -k 2 60`, in its own process group, with `CAVE_PROOF_PORT` (the port) and `CAVE_PROOF_FIXTURE` (the copy) in its environment.
-    7. Goes through the `--keys` and `--wait` arguments **in the order they were given**: `--keys` sends the value with `tmux send-keys` and waits 0.3 seconds; `--wait` polls until a line of the screen matches the regular expression (`grep -E`; 15 seconds at most, else it fails and prints the screen).
+    7. Goes through the `--keys` and `--wait` arguments **in the order they were given**: `--keys` sends tmux key names (`2`, `Enter`, `C-d`, separated by spaces) with `tmux send-keys` and waits 0.3 seconds; `--text` types its value as it is (`send-keys -l`); `--wait` polls until a line of the screen matches the regular expression (`grep -E`; 15 seconds at most, else it fails and prints the screen).
     8. Waits 0.5 seconds.
     9. Saves `capture-pane -p` to `<out.txt>`.
     10. Always, also after a failure (a `trap`): kills the `--during` process group, sends `q` and `y`, runs `tmux -L … kill-server`, removes the temporary folders.
@@ -845,7 +845,7 @@ scripts/tui-proof.sh docs/implemented-proof-images/5.1-help.txt  --config script
 **Proof** (U):
 ```
 scripts/tui-proof.sh docs/implemented-proof-images/5.5-person-keys.txt   --config scripts/testdata/two-people --keys 2 --keys Enter
-scripts/tui-proof.sh docs/implemented-proof-images/5.5-add-key-error.txt --config scripts/testdata/two-people --keys 2 --keys Enter --keys a --keys 'not a key' --keys C-d
+scripts/tui-proof.sh docs/implemented-proof-images/5.5-add-key-error.txt --config scripts/testdata/two-people --keys 2 --keys Enter --keys a --text 'not a key' --keys C-d
 ```
 The second must show the sentence for text that is not a key.
 

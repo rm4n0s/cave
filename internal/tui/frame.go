@@ -1,0 +1,159 @@
+package tui
+
+import (
+	"strconv"
+	"strings"
+
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
+	"github.com/rm4n0s/cave/internal/core/server"
+)
+
+// The least size the TUI draws in (docs/SPEC.md §12).
+const (
+	minWidth  = 60
+	minHeight = 16
+)
+
+// chrome is how many lines the frame uses besides the page: the header, the pages, a rule above
+// and below the page, the message line and the footer.
+const chrome = 6
+
+// View draws the screen. It only reads the model.
+func (m Model) View() tea.View {
+	v := tea.NewView(m.render())
+	v.AltScreen = true
+	return v
+}
+
+// render returns the whole screen as text: exactly m.height lines of at most m.width cells.
+func (m Model) render() string {
+	if m.width <= 0 || m.height <= 0 {
+		return "" // the terminal's size is not known yet
+	}
+	if m.width < minWidth || m.height < minHeight {
+		return "Terminal too small (needs " + strconv.Itoa(minWidth) + "×" + strconv.Itoa(minHeight) + ")"
+	}
+	rule := strings.Repeat("─", m.width)
+	lines := make([]string, 0, m.height)
+	lines = append(lines, m.header(), m.tabs(), m.st.dim.Render(rule))
+	lines = append(lines, m.body(m.height-chrome)...)
+	lines = append(lines, m.st.dim.Render(rule), m.messageLine(), m.footer())
+	for i, line := range lines {
+		lines[i] = fit(line, m.width)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// header is the first line: the name and the state of the server on the left, the counts on the
+// right.
+func (m Model) header() string {
+	left := m.st.title.Render("Cave") + "   " + m.stateText()
+	right := strconv.Itoa(len(m.connections)) + " connected · " + strconv.Itoa(len(m.attempts.Entries)) + " attempts"
+	if gap := m.width - lipgloss.Width(left) - lipgloss.Width(right); gap >= 2 {
+		return left + strings.Repeat(" ", gap) + right
+	}
+	return left
+}
+
+// stateText says what the server is doing, in words, colored besides.
+func (m Model) stateText() string {
+	switch m.server.State {
+	case server.Running:
+		return m.st.good.Render("running on port " + strconv.Itoa(m.server.Port))
+	case server.Starting:
+		return "starting…"
+	case server.Stopping:
+		return "stopping…"
+	}
+	if m.server.Err != nil {
+		return m.st.bad.Render("not running")
+	}
+	return m.st.dim.Render("stopped")
+}
+
+// tabs is the second line: the pages, with the current one in brackets and reversed.
+func (m Model) tabs() string {
+	parts := make([]string, pageCount)
+	for p := page(0); p < pageCount; p++ {
+		label := strconv.Itoa(int(p)+1) + " " + p.title()
+		if p == m.page {
+			parts[p] = m.st.current.Render("[" + label + "]")
+		} else {
+			parts[p] = label
+		}
+	}
+	separator := "  "
+	if lipgloss.Width(strings.Join(parts, separator)) > m.width {
+		separator = " "
+	}
+	return strings.Join(parts, separator)
+}
+
+// body is the part between the rules: the help, or the current page. It has exactly height
+// lines.
+func (m Model) body(height int) []string {
+	var lines []string
+	if m.help {
+		lines = m.helpLines()
+	} else {
+		lines = m.pageLines(height)
+	}
+	if len(lines) > height {
+		lines = lines[:height]
+	}
+	for len(lines) < height {
+		lines = append(lines, "")
+	}
+	return lines
+}
+
+// pageLines draws the current page into at most height lines.
+func (m Model) pageLines(_ int) []string {
+	return []string{m.st.title.Render(m.page.title())}
+}
+
+// helpLines lists every key: the ones that work everywhere, then the current page's.
+func (m Model) helpLines() []string {
+	lines := []string{m.st.title.Render("Keys everywhere")}
+	lines = append(lines, m.bindingLines(globalBindings())...)
+	if rows := pageBindings(m.page); len(rows) > 0 {
+		lines = append(lines, "", m.st.title.Render("Keys of "+m.page.title()))
+		lines = append(lines, m.bindingLines(rows)...)
+	}
+	return lines
+}
+
+// bindingLines draws one line for each binding: the keys in a column of their own.
+func (m Model) bindingLines(rows []binding) []string {
+	width := 0
+	for _, r := range rows {
+		width = max(width, lipgloss.Width(r.keys))
+	}
+	lines := make([]string, len(rows))
+	for i, r := range rows {
+		lines[i] = "  " + m.st.key.Render(fit(r.keys, width)) + "  " + r.what
+	}
+	return lines
+}
+
+// messageLine is the line above the footer: the error of the last command, or nothing.
+func (m Model) messageLine() string {
+	if m.message == "" {
+		return ""
+	}
+	if m.messageErr {
+		return m.st.err.Render(m.message)
+	}
+	return m.message
+}
+
+// footer is the last line: the keys of the page, then the two that are always there.
+func (m Model) footer() string {
+	rows := append(append([]binding(nil), pageBindings(m.page)...), binding{"?", "keys"}, binding{"q", "quit"})
+	parts := make([]string, len(rows))
+	for i, r := range rows {
+		parts[i] = m.st.key.Render(r.keys) + " " + r.what
+	}
+	return strings.Join(parts, "   ")
+}

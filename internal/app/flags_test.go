@@ -2,6 +2,7 @@ package app
 
 import (
 	"flag"
+	"io"
 	"log/slog"
 	"reflect"
 	"strings"
@@ -29,6 +30,8 @@ func TestParseFlags(t *testing.T) {
 		{"the lowest port", []string{"--port", "1"}, Flags{Port: 1, LogLevel: slog.LevelInfo}},
 		{"the highest port", []string{"--port=65535"}, Flags{Port: 65535, LogLevel: slog.LevelInfo}},
 		{"the quietest log", []string{"--log-level", "error"}, Flags{LogLevel: slog.LevelError}},
+		{"a page", []string{"--page", "attempts"}, Flags{Page: "attempts", LogLevel: slog.LevelInfo}},
+		{"every page", []string{"--page=settings"}, Flags{Page: "settings", LogLevel: slog.LevelInfo}},
 		{"a flag that is turned off", []string{"--no-start=false"}, Flags{LogLevel: slog.LevelInfo}},
 	}
 	for _, tt := range tests {
@@ -58,6 +61,8 @@ func TestParseFlagsErrors(t *testing.T) {
 		{"port 0", []string{"--port", "0"}, "ParseFlags.FlagsPortInvalid"},
 		{"a negative port", []string{"--port=-1"}, "ParseFlags.FlagsPortInvalid"},
 		{"a port that does not exist", []string{"--port", "65536"}, "ParseFlags.FlagsPortInvalid"},
+		{"a page there is not", []string{"--page", "home"}, "ParseFlags.FlagsPageInvalid"},
+		{"a page in another case", []string{"--page", "People"}, "ParseFlags.FlagsPageInvalid"},
 		{"a log level there is not", []string{"--log-level", "loud"}, "ParseLevel.LogLevelInvalid"},
 		{"help", []string{"--help"}, "ParseFlags.FlagsHelp"},
 		{"help, short", []string{"-h"}, "ParseFlags.FlagsHelp"},
@@ -86,13 +91,28 @@ func TestParseFlagsErrors(t *testing.T) {
 	}
 }
 
+func TestAPageThatIsNotKnownIsNamedSafely(t *testing.T) {
+	_, err := ParseFlags("cave", []string{"--page", "a\x1b[31mb"})
+	meta := errtest.Route(t, err, "FlagsPageInvalid")
+	if meta["page"] != "a\uFFFD[31mb" {
+		t.Errorf("metadata = %q", meta["page"])
+	}
+}
+
+func TestPages(t *testing.T) {
+	want := []string{"overview", "people", "attempts", "connections", "settings"}
+	if !reflect.DeepEqual(Pages, want) {
+		t.Errorf("Pages = %v, want %v", Pages, want)
+	}
+}
+
 func TestUsage(t *testing.T) {
 	for _, program := range []string{"cave", "tcave"} {
 		text := Usage(program)
 		if !strings.HasPrefix(text, "Usage: "+program+" [flags]\n") {
 			t.Errorf("the usage of %s begins with %q", program, text[:min(len(text), 40)])
 		}
-		for _, name := range []string{"-config-dir", "-state-dir", "-port", "-no-start", "-allow-root", "-log-level", "-version"} {
+		for _, name := range []string{"-config-dir", "-state-dir", "-port", "-no-start", "-allow-root", "-log-level", "-version", "-page"} {
 			if !strings.Contains(text, "  "+name) {
 				t.Errorf("the usage of %s has no %s:\n%s", program, name, text)
 			}
@@ -127,4 +147,24 @@ func TestFlagsOptions(t *testing.T) {
 	// A folder that is not an absolute path is refused, by the rule of the folders.
 	_, err = Flags{ConfigDir: "relative/config"}.Options("cave", env(nil))
 	errtest.Route(t, err, "Flags.Options->Resolve.StorageDirNotAbsolute")
+}
+
+func TestIsUsageError(t *testing.T) {
+	for _, args := range [][]string{{"--nope"}, {"x"}, {"--port", "0"}, {"--page", "home"}, {"--log-level", "loud"}} {
+		_, err := ParseFlags("cave", args)
+		if !IsUsageError(err) {
+			t.Errorf("%v: %v is not a usage error", args, err)
+		}
+	}
+	_, help := ParseFlags("cave", []string{"--help"})
+	for name, err := range map[string]error{
+		"help":                 help,
+		"nil":                  nil,
+		"an error of the app":  errors.New("RunningAsRoot", "x"),
+		"an error of the kind": io.EOF,
+	} {
+		if IsUsageError(err) {
+			t.Errorf("%s is a usage error", name)
+		}
+	}
 }

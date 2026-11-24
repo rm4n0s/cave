@@ -76,6 +76,7 @@ func TestMessage(t *testing.T) {
 	_, flagsArgument := ParseFlags("tcave", []string{"extra"})
 	_, flagsUnknown := ParseFlags("tcave", []string{"--nope"})
 	_, flagsHelp := ParseFlags("tcave", []string{"--help"})
+	_, flagsPage := ParseFlags("tcave", []string{"--page", "home"})
 	_, root := Open(ctx, func() Options { o := f.options(); o.IsRoot = func() bool { return true }; return o }())
 
 	_, badName := a.AddPerson(ctx, "-bad")
@@ -115,6 +116,7 @@ func TestMessage(t *testing.T) {
 		{"a port flag out of range", flagsPort, "A port is a number from 1 to 65535, not 0."},
 		{"an argument", flagsArgument, "Cave takes flags only, not extra. Run with --help to see them."},
 		{"an unknown flag", flagsUnknown, "The command line is not right: flag provided but not defined: -nope. Run with --help to see the flags."},
+		{"a page that does not exist", flagsPage, "There is no page named home. The pages are overview, people, attempts, connections and settings."},
 		{"help", flagsHelp, "Run with --help to see the flags."},
 		{"an error of another kind", io.EOF, "EOF"},
 		{"a Tag without a sentence", errors.New("NoSentenceForThis", "what went wrong", "path", "/x"), "what went wrong"},
