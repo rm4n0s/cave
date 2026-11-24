@@ -84,6 +84,9 @@ func (m Model) peopleLines(height int) []string {
 
 // keyPeople handles a key of the People page that is not one of the keys of every page.
 func (m Model) keyPeople(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
+	if m.personID != "" {
+		return m.keyPerson(msg)
+	}
 	name := msg.String()
 	m.peopleList.setHeight(m.height - chrome - 1)
 	if m.peopleList.key(name) {
@@ -108,6 +111,12 @@ func (m Model) keyPeople(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 					return promptDone{id: id, err: a.RenamePerson(ctx, p.ID, text), selectID: p.ID}
 				}
 			})
+		}
+	case "enter":
+		if p, ok := m.selectedPerson(); ok {
+			m.personID, m.keyList, m.keySel = p.ID, list{}, ""
+			m.keyList.setHeight(m.height - chrome - 2)
+			m.syncKeys()
 		}
 	case "space":
 		return m.togglePerson()

@@ -27,4 +27,4 @@ Cave   stopped                                                              0 co
                                                                                                     
 ────────────────────────────────────────────────────────────────────────────────────────────────────
                                                                                                     
-a add   e rename   space on/off   d remove   ? keys   q quit                                        
+enter open   a add   e rename   space on/off   d remove   ? keys   q quit                           

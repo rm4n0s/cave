@@ -57,3 +57,19 @@ func fitAlign(s string, width int, right bool) string {
 func cellWidth(r rune) int {
 	return lipgloss.Width(string(r))
 }
+
+// wrapLines wraps s to lines of at most width cells and keeps at most maxLines of them: when
+// there is more, the last line ends with "…". An empty s gives no line.
+func wrapLines(s string, width, maxLines int) []string {
+	if s == "" || maxLines < 1 {
+		return nil
+	}
+	parts := strings.Split(ansi.Wrap(s, max(width, 1), ""), "\n")
+	if len(parts) > maxLines {
+		parts = append(parts[:maxLines-1:maxLines-1], fit(parts[maxLines-1]+"…", max(width, 1)))
+	}
+	for i, p := range parts {
+		parts[i] = fit(p, max(width, 1))
+	}
+	return parts
+}

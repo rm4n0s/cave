@@ -64,6 +64,7 @@ type Model struct {
 	ask *asking
 	// prompt is the text field that is open, nil when there is none. It gets every key too.
 	prompt    *prompt
+	area      *areaInput
 	promptSeq int
 
 	// The People page: the selection, the person it is on (so that it stays on them when the list
@@ -71,6 +72,11 @@ type Model struct {
 	peopleList   list
 	peopleSel    string
 	peopleWanted string
+	// personID is the person whose keys the People page shows, "" for the list of people; keyList
+	// and keySel are the selection among their keys, kept by the key's id.
+	personID string
+	keyList  list
+	keySel   string
 	// message is the text of the message line; messageErr says that it is an error.
 	message    string
 	messageErr bool
@@ -99,6 +105,7 @@ func (m *Model) refresh() {
 	m.connections = m.app.Connections()
 	m.settings = m.app.Settings()
 	m.syncPeople()
+	m.syncKeys()
 }
 
 // Init starts nothing: the program sends the size by itself.
@@ -112,6 +119,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
 		m.peopleList.setHeight(m.height - chrome - 1)
+		m.keyList.setHeight(m.height - chrome - 2)
 	case changedMsg, tickMsg:
 		m.refresh()
 	case doneMsg:
@@ -123,7 +131,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case promptDone:
 		m = m.promptEnded(msg)
 	case tea.PasteMsg:
-		if m.prompt != nil {
+		switch {
+		case m.area != nil:
+			m = m.pasteArea(msg.Content)
+		case m.prompt != nil:
 			m = m.pastePrompt(msg.Content)
 		}
 	case tea.KeyPressMsg:
@@ -135,6 +146,16 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 // promptEnded is what the end of a prompt's command does: close the prompt, or show why it
 // failed. The end of a prompt that was closed meanwhile is ignored.
 func (m Model) promptEnded(done promptDone) Model {
+	if m.area != nil && m.area.id == done.id {
+		if done.err != nil {
+			in := *m.area
+			in.err, in.busy = app.Message(done.err), false
+			m.area = &in
+		} else {
+			m.area = nil
+		}
+		return m
+	}
 	if m.prompt == nil || m.prompt.id != done.id {
 		return m
 	}
@@ -157,6 +178,9 @@ func (m Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	name := msg.String()
 	if m.ask != nil {
 		return m.keyAsked(msg)
+	}
+	if m.area != nil {
+		return m.keyArea(msg)
 	}
 	if m.prompt != nil {
 		return m.keyPrompt(msg)

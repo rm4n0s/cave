@@ -1,0 +1,30 @@
+Cave   running on port 42367                                                0 connected · 0 attempts
+1 Overview  [2 People]  3 Attempts  4 Connections  5 Settings
+────────────────────────────────────────────────────────────────────────────────────────────────────
+alice   enabled   not connected
+  Type        Fingerprint                                                Comment          Added
+> ssh-ed25519 SHA256:waV/Kujpbnd3VmcxNHHJFbirkkZy/f9Jq3wUG6U8PcE         laptop           2026-11-20
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────────────────────────
+
+a add   i import   c comment   d remove   esc back   ? keys   q quit

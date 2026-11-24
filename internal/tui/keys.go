@@ -69,25 +69,47 @@ func pageBindings(p page) []binding {
 	case pageOverview:
 		return []binding{{"s", "start or stop the server"}}
 	case pagePeople:
-		return []binding{{"a", "add"}, {"e", "rename"}, {"space", "on/off"}, {"d", "remove"}}
+		return []binding{{"enter", "open"}, {"a", "add"}, {"e", "rename"}, {"space", "on/off"}, {"d", "remove"}}
 	case pageAttempts, pageConnections, pageSettings:
 		return nil
 	}
 	return nil
 }
 
-// ownBindings are the keys of a page that do not work on every page: what the help lists under
-// the page's name (the footer shows all of pageBindings).
-func ownBindings(p page) []binding {
+// ownBindings are the keys among all that do not work on every page: what the help lists under
+// the page's name (the footer shows all of them).
+func ownBindings(all []binding) []binding {
 	global := map[string]bool{}
 	for _, b := range globalBindings() {
 		global[b.keys] = true
 	}
 	var rows []binding
-	for _, b := range pageBindings(p) {
+	for _, b := range all {
 		if !global[b.keys] {
 			rows = append(rows, b)
 		}
 	}
 	return rows
+}
+
+// personBindings are the keys of the People page when a person is open.
+func personBindings() []binding {
+	return []binding{{"a", "add"}, {"i", "import"}, {"c", "comment"}, {"d", "remove"}, {"esc", "back"}}
+}
+
+// pageKeys are the keys of what the current page shows now: a person's keys on the People page
+// when one is open.
+func (m Model) pageKeys() []binding {
+	if m.page == pagePeople && m.personID != "" {
+		return personBindings()
+	}
+	return pageBindings(m.page)
+}
+
+// keysTitle names what pageKeys are the keys of, for the help.
+func (m Model) keysTitle() string {
+	if m.page == pagePeople && m.personID != "" {
+		return "a person"
+	}
+	return m.page.title()
 }

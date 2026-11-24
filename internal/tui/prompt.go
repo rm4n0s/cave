@@ -70,8 +70,8 @@ func (m Model) pastePrompt(text string) Model {
 // view draws the prompt: the sentence of the last failure, if any, then the label and the field.
 func (p prompt) view(width int, st styles) []string {
 	var lines []string
-	if p.err != "" {
-		lines = append(lines, st.err.Render(fit(p.err, width)))
+	for _, line := range wrapLines(p.err, width, 2) {
+		lines = append(lines, st.err.Render(line))
 	}
 	room := max(width-lipgloss.Width(p.label)-1, 1)
 	lines = append(lines, st.title.Render(p.label)+" "+p.f.view(room, st))

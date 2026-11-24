@@ -1,0 +1,30 @@
+Cave   running on port 2222                                                 1 connected · 9 attempts
+1 Overview  [2 People]  3 Attempts  4 Connections  5 Settings                                       
+────────────────────────────────────────────────────────────────────────────────────────────────────
+Paste public keys (one per line), then press ctrl+d. esc cancels.                                   
+This is a private key. Paste the public key instead: the file that ends in .pub.                    
+-----BEGIN OPENSSH PRIVATE KEY-----                                                                 
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                    
+ctrl+d add   esc cancel                                                                             

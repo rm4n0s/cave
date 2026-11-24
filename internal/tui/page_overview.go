@@ -4,7 +4,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/charmbracelet/x/ansi"
 	"github.com/rm4n0s/cave/internal/app"
 	"github.com/rm4n0s/cave/internal/core/server"
 )
@@ -54,14 +53,10 @@ func (m Model) serverLines() []string {
 // errorLines draws the sentence of an error in the error style, wrapped to the width and kept to
 // at most max lines: what does not fit ends in "…".
 func (m Model) errorLines(err error, max int) []string {
-	text := ansi.Wrap(app.Message(err), m.width-overviewLabel, "")
-	parts := strings.Split(text, "\n")
-	if len(parts) > max {
-		parts = append(parts[:max-1:max-1], parts[max-1]+"…")
-	}
+	parts := wrapLines(app.Message(err), m.width-overviewLabel, max)
 	lines := make([]string, len(parts))
 	for i, p := range parts {
-		lines[i] = strings.Repeat(" ", overviewLabel) + m.st.err.Render(fit(p, m.width-overviewLabel))
+		lines[i] = strings.Repeat(" ", overviewLabel) + m.st.err.Render(p)
 	}
 	return lines
 }

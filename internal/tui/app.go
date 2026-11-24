@@ -31,4 +31,8 @@ type App interface {
 	RenamePerson(ctx context.Context, id, name string) error
 	SetPersonEnabled(ctx context.Context, id string, enabled bool) error
 	RemovePerson(ctx context.Context, id string) error
+	AddKeys(ctx context.Context, personID, text string) ([]people.Key, error)
+	ImportKeys(ctx context.Context, personID, path string) ([]people.Key, error)
+	SetKeyComment(ctx context.Context, personID, keyID, comment string) error
+	RemoveKey(ctx context.Context, personID, keyID string) error
 }

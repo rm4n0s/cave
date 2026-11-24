@@ -99,6 +99,8 @@ func (m Model) body(height int) []string {
 		lines = m.ask.q.view(m.width, height, m.st)
 	case m.help:
 		lines = m.helpLines()
+	case m.area != nil:
+		lines = m.area.view(m.width, height, m.st)
 	case m.prompt != nil:
 		// The page is drawn above the prompt, which has the last lines of the body.
 		own := m.prompt.view(m.width, m.st)
@@ -125,6 +127,9 @@ func (m Model) pageLines(height int) []string {
 	case pageOverview:
 		return m.overviewLines(height)
 	case pagePeople:
+		if m.personID != "" {
+			return m.personLines(height)
+		}
 		return m.peopleLines(height)
 	}
 	return []string{m.st.title.Render(m.page.title())}
@@ -134,8 +139,8 @@ func (m Model) pageLines(height int) []string {
 func (m Model) helpLines() []string {
 	lines := []string{m.st.title.Render("Keys everywhere")}
 	lines = append(lines, m.bindingLines(globalBindings())...)
-	if rows := ownBindings(m.page); len(rows) > 0 {
-		lines = append(lines, "", m.st.title.Render("Keys of "+m.page.title()))
+	if rows := ownBindings(m.pageKeys()); len(rows) > 0 {
+		lines = append(lines, "", m.st.title.Render("Keys of "+m.keysTitle()))
 		lines = append(lines, m.bindingLines(rows)...)
 	}
 	return lines
@@ -167,16 +172,25 @@ func (m Model) messageLine() string {
 
 // footer is the last line: the keys of the page, then the two that are always there.
 func (m Model) footer() string {
+	if m.area != nil {
+		return m.st.key.Render("ctrl+d") + " add   " + m.st.key.Render("esc") + " cancel"
+	}
 	if m.prompt != nil {
 		return m.st.key.Render("enter") + " ok   " + m.st.key.Render("esc") + " cancel"
 	}
 	if m.ask != nil {
 		return m.st.key.Render("y") + " " + m.ask.q.yes + "   " + m.st.key.Render("n") + " cancel"
 	}
-	rows := append(append([]binding(nil), pageBindings(m.page)...), binding{"?", "keys"}, binding{"q", "quit"})
+	rows := append(append([]binding(nil), m.pageKeys()...), binding{"?", "keys"}, binding{"q", "quit"})
 	parts := make([]string, len(rows))
 	for i, r := range rows {
 		parts[i] = m.st.key.Render(r.keys) + " " + r.what
 	}
-	return strings.Join(parts, "   ")
+	// The keys are spaced as widely as the width allows.
+	for _, gap := range []string{"   ", "  ", " "} {
+		if line := strings.Join(parts, gap); lipgloss.Width(line) <= m.width {
+			return line
+		}
+	}
+	return strings.Join(parts, " ")
 }

@@ -13,4 +13,4 @@ Cave   running on port 2222         1 connected · 9 attempts
                                                             
 ────────────────────────────────────────────────────────────
                                                             
-a add   e rename   space on/off   d remove   ? keys   q quit
+enter open a add e rename space on/off d remove ? keys q qu…
