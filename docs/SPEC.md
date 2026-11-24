@@ -291,7 +291,8 @@ Only one of `shell`, `exec`, `subsystem` succeeds per channel. Rules:
 - **With a PTY**: the three are the PTY, and the process is the leader of a new session with the PTY as controlling terminal.
 - When the process ends, Cave sends what is left of its output (waiting at most 2 seconds for descendants that still hold the pipes), then `exit-status`, or `exit-signal` when a signal killed it, and closes the channel.
 - When the channel or the connection ends first: with a PTY, the PTY is closed (the kernel sends `SIGHUP`); without one, the process's group gets `SIGHUP` once. Cave never sends `SIGKILL`: a job started with `nohup` survives, as with `sshd`.
-- A process that cannot start (`SessionStartFailed`) is reported to the client on the channel's error stream with exit status 255, and logged.
+- A process that cannot start (`SessionStartFailed`) is reported to the client on the channel's error stream with exit status 255, and logged. The request itself is granted, as with `sshd`, whose child fails after the request was answered.
+- A signal that killed the process and has no name in the protocol is reported as the exit status a shell gives it: 128 plus its number.
 
 ### 9.5 The environment of a session (Linux)
 
@@ -311,6 +312,8 @@ The process does **not** inherit Cave's environment. It gets exactly:
 | `SSH_AUTH_SOCK` | The forwarded agent's socket (only with agent forwarding). Never Cave's own |
 | `CAVE_PERSON` | The person's name |
 | accepted `env` requests | As sent |
+
+What Cave sets is put over what the client set: whatever `session.acceptEnv` allows, a client cannot set `USER`, `LOGNAME`, `HOME`, `SHELL`, `PATH`, `XDG_RUNTIME_DIR`, `TERM`, the `SSH_` variables or `CAVE_PERSON`. An `env` request after the process started is refused.
 
 The shell is `session.shell` when set; else the user's shell in `/etc/passwd`; else `$SHELL` of Cave; else `/bin/sh`. A login shell is started with `-` before its name in `argv[0]`.
 
