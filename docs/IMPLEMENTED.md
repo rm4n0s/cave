@@ -115,3 +115,14 @@ One entry per finished step of `docs/IMPLEMENTATION.md`, newest last. Format:
 - **Proof**: none
 - **Manual checks**: none
 - **Glutter issues**: none
+
+## Step 2.1: The test harness
+- **Date**: 2026-11-24
+- **Branch**: feat/step-2.1-sshtest
+- **Summary**: `internal/core/sshtest`: `NewKey` (Ed25519, ECDSA or RSA, with a private key file of mode `0600` under the test's folder), `ClientConfig`/`Dial`/`DialErr` (the client inside the test, which accepts only the host key it is given), `Require`, `OpenSSH` (the real `ssh`, `sftp` and `scp` with `-F none`, a `known_hosts` of its own, `IdentitiesOnly`, no agent, no prompt, a home under the test's folder, a 30-second limit) and `StartAgent` (a real `ssh-agent` on a socket under a temporary folder, killed when the test ends).
+- **Decisions**: `OpenSSH.SSH(stdin, user, key, options, command...)` takes ssh's extra options apart from the command. `UseAgent` turns `IdentitiesOnly` off and names the test's agent, because ssh keeps the first value an option gets. The harness never uses `InsecureIgnoreHostKey`: both the client inside the test and OpenSSH check the host key.
+- **Checks**: `scripts/checks.sh` passed, every check (gofmt, vet for Linux and Windows, golangci-lint 0 issues, race tests as a debug build, cgo-free build and tests, Windows build, error tags: none untested, the Wine run).
+- **Tests**: against a minimal `x/crypto/ssh` server inside the test (not Cave's): the three kinds of key and their files; the client inside the test runs a command, and a wrong key, a wrong name and a wrong host key are errors; the real `ssh` (OpenSSH 10.6) runs a command with input, both output streams and the exit status, gets "Permission denied (publickey)" for a wrong key and "Host key verification failed" for a wrong host key without changing `known_hosts`; the isolating options and environment are on every command, with the user's `SSH_AUTH_SOCK` and `HOME` set to prove they do not get through; a test agent holds the keys, lets `ssh` log in with a key that is only in it, and is gone after the test.
+- **Proof**: none
+- **Manual checks**: none
+- **Glutter issues**: none
