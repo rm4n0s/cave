@@ -51,3 +51,7 @@ Build the files with `scripts/heavy.sh -- scripts/build-windows.sh` and copy `di
 - Does `cave.exe` open without a console window? Do the tray icon and a notification appear (add a person, then connect with `ssh` from another computer, with `Notify when someone connects` on in Settings)?
 - From another computer, does `ssh <person>@<pc>` give a shell (ConPTY)? Does `sftp <person>@<pc>` list the drives at `/` and work? Does `ssh -A <person>@<pc> ssh-add -l` list the key of your agent (step 7.4 has the same check)?
 - Does `tcave.exe` draw correctly in Windows Terminal and in the old console (`cmd.exe` window)? Do the keys and the colors work, and does `q` quit?
+
+## Step 8.2: the icon and the desktop entry
+
+On a Linux desktop: copy `packaging/cave.desktop` to `~/.local/share/applications/` and the icons to `~/.local/share/icons/hicolor/<size>x<size>/apps/io.github.rm4n0s.cave.png` (from `packaging/icons/cave-<size>.png`), then start `cave` from the application menu. Does the menu show the Cave icon? Does the window and the task bar show it? Is the tray icon (a green dot while the server runs, none when it does not) clear at the size of your panel? On Windows, does `cave.exe` show the icon in its file properties, the task bar and the tray?

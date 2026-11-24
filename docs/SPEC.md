@@ -66,7 +66,7 @@ cmd/tcave ► internal/tui ┘
 | `internal/core/wine` | `Running()`: whether a test runs under Wine, so it can skip what Wine cannot do (§13.6); only tests use it |
 | `internal/core/netinfo` | The addresses of this computer, for "how to connect" |
 | `internal/core/sshtest` | Test harness: keys, an in-process client, and the real OpenSSH programs, isolated (§14) |
-| `internal/gui/...` | The desktop UI (§11); `internal/gui/testutil` has the test fonts and pumps |
+| `internal/gui/...` | The desktop UI (§11); `internal/gui/testutil` has the test fonts and pumps; `internal/gui/icon` draws Cave's icon (window, tray and the files of `packaging/icons`) |
 | `internal/tui/...` | The terminal UI (§12) |
 | `internal/archtest` | Tests of the rules of §4.2; `internal/archtest/cmd/errortags` lists error Tags and finds untested ones |
 

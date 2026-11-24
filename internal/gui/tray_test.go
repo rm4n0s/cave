@@ -3,6 +3,7 @@ package gui
 import (
 	"context"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/rm4n0s/cave/internal/app/apptest"
 	"github.com/rm4n0s/cave/internal/core/attempts"
 	"github.com/rm4n0s/cave/internal/core/server"
+	"github.com/rm4n0s/cave/internal/gui/icon"
 	"github.com/rm4n0s/cave/internal/gui/testutil"
 )
 
@@ -307,5 +309,22 @@ func TestWithoutATray(t *testing.T) {
 	}
 	if got := len(tester.TakeErrors()); got != 0 {
 		t.Errorf("the app reported %d errors without a tray", got)
+	}
+}
+
+func TestTheWindowIconIsValidAndHasEverySize(t *testing.T) {
+	win := windowIcon()
+	if err := win.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	if win.Name != appID {
+		t.Errorf("the icon's name is %q, want the application ID %q", win.Name, appID)
+	}
+	var sizes []int
+	for _, img := range win.Images {
+		sizes = append(sizes, img.Size)
+	}
+	if !slices.Equal(sizes, icon.Sizes) {
+		t.Errorf("the icon has the sizes %v, want %v", sizes, icon.Sizes)
 	}
 }

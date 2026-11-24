@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Cave
+Comment=An SSH server you start, watch and stop
+Exec=cave
+Icon=io.github.rm4n0s.cave
+Categories=Network;
+Terminal=false
+StartupWMClass=io.github.rm4n0s.cave

@@ -72,9 +72,9 @@ func (s *shell) Build(bc m.BuildContext) m.Widget {
 	})))
 }
 
-// icon returns the icon of a page, with the number of connections on the Connections one when it
+// pageIcon returns the icon of a page, with the number of connections on the Connections one when it
 // is not 0.
-func icon(v *view, page int) m.Widget {
+func pageIcon(v *view, page int) m.Widget {
 	ic := destinations[page].icon()
 	if app.Pages[page] == "connections" && len(v.connections) > 0 {
 		return m.NewBadge(ic, m.BadgeOpts{
@@ -88,7 +88,7 @@ func icon(v *view, page int) m.Widget {
 func railDestinations(v *view) []m.NavigationRailDestination {
 	out := make([]m.NavigationRailDestination, len(destinations))
 	for i, d := range destinations {
-		out[i] = m.NewNavigationRailDestination(icon(v, i), m.NewText(d.label))
+		out[i] = m.NewNavigationRailDestination(pageIcon(v, i), m.NewText(d.label))
 	}
 	return out
 }
@@ -96,7 +96,7 @@ func railDestinations(v *view) []m.NavigationRailDestination {
 func barDestinations(v *view) []m.Widget {
 	out := make([]m.Widget, len(destinations))
 	for i, d := range destinations {
-		out[i] = m.NewNavigationDestination(icon(v, i), d.label)
+		out[i] = m.NewNavigationDestination(pageIcon(v, i), d.label)
 	}
 	return out
 }

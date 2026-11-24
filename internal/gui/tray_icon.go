@@ -2,11 +2,11 @@ package gui
 
 import (
 	"image"
-	"image/color"
+	"image/draw"
 	"log/slog"
-	"math"
 	"sync"
 
+	"github.com/rm4n0s/cave/internal/gui/icon"
 	"github.com/rm4n0s/glutter/desktop"
 	"github.com/rm4n0s/glutter/ui"
 )
@@ -14,53 +14,26 @@ import (
 // trayIconSize is the size of the picture the tray icon is drawn at; the tray scales it.
 const trayIconSize = 32
 
-// The colors of the icon: green while the server runs, grey while it does not, and a white key.
-var (
-	trayRunning = color.NRGBA{R: 0x2E, G: 0x7D, B: 0x32, A: 0xFF}
-	trayStopped = color.NRGBA{R: 0x75, G: 0x75, B: 0x75, A: 0xFF}
-	trayKey     = color.NRGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}
-)
+// nonPremultiplied returns the picture as the non-premultiplied colors that Glutter's icons take.
+func nonPremultiplied(img image.Image) *image.NRGBA {
+	out := image.NewNRGBA(img.Bounds())
+	draw.Draw(out, out.Bounds(), img, img.Bounds().Min, draw.Src)
+	return out
+}
 
-// trayIcon draws the icon of the tray: a rounded square with a keyhole, green when the server
-// runs and grey when it does not. It is drawn here, so that Cave has no image file; step 8.2 puts
-// the real icon in its place.
+// trayIcon draws the icon of the tray: Cave's icon, with a green dot while the server runs.
 func trayIcon(running bool) image.Image {
-	fill := trayStopped
-	if running {
-		fill = trayRunning
-	}
-	img := image.NewNRGBA(image.Rect(0, 0, trayIconSize, trayIconSize))
-	const radius = 7.0
-	for y := 0; y < trayIconSize; y++ {
-		for x := 0; x < trayIconSize; x++ {
-			px, py := float64(x)+0.5, float64(y)+0.5
-			switch {
-			case inRoundedSquare(px, py, trayIconSize, radius):
-				if inKeyhole(px, py) {
-					img.SetNRGBA(x, y, trayKey)
-				} else {
-					img.SetNRGBA(x, y, fill)
-				}
-			}
-		}
-	}
-	return img
+	return nonPremultiplied(icon.Tray(trayIconSize, running))
 }
 
-// inRoundedSquare says whether the point is inside a square of the size with rounded corners.
-func inRoundedSquare(x, y, size, radius float64) bool {
-	// The distance to the nearest corner circle's centre, for a point in a corner.
-	cx := math.Min(math.Max(x, radius), size-radius)
-	cy := math.Min(math.Max(y, radius), size-radius)
-	return math.Hypot(x-cx, y-cy) <= radius
-}
-
-// inKeyhole says whether the point is in the keyhole: a disc with a slot below it.
-func inKeyhole(x, y float64) bool {
-	if math.Hypot(x-16, y-13) <= 4.5 {
-		return true
+// windowIcon is the icon of the window: Cave's icon in every size of the packaging, and its name
+// in the icon theme, which a desktop that has installed it (packaging/cave.desktop) prefers.
+func windowIcon() ui.WindowIcon {
+	win := ui.WindowIcon{Name: appID}
+	for _, size := range icon.Sizes {
+		win.Images = append(win.Images, ui.WindowIconImage{Size: size, RGBA: nonPremultiplied(icon.Draw(size)).Pix})
 	}
-	return x >= 14 && x <= 18 && y >= 14 && y <= 24
+	return win
 }
 
 // trayWindowIcon is the icon of the tray in the form the tray takes.

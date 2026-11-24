@@ -53,6 +53,7 @@ func Run(ctx context.Context, a App, opts Options) error {
 			Title:   "Cave",
 			Size:    ui.Size{Width: 960, Height: 640},
 			MinSize: ui.Size{Width: 720, Height: 480},
+			Icon:    windowIcon(),
 		},
 	})
 	if err != nil {
