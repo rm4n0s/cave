@@ -12,6 +12,7 @@ import (
 	"github.com/rm4n0s/cave/internal/core/sanitize"
 	"github.com/rm4n0s/errors"
 	"golang.org/x/crypto/ssh"
+	"sync/atomic"
 )
 
 // TagConnectionNotFound is the Tag of the error of disconnecting a connection that is not there.
@@ -118,6 +119,8 @@ type Conn struct {
 	channels int
 	// noMoreSessions says that the client asked for no further session.
 	noMoreSessions bool
+	// keepAlive asks the client whether it is still there; tests look at it.
+	keepAlive *keepAlive
 }
 
 // ID returns the connection's id.
@@ -278,7 +281,7 @@ func (s *Server) peopleChanged(change people.Change) {
 // serveAuthenticated runs an authenticated connection until it ends: it puts it in the registry,
 // gives its channels and requests to their handlers, and takes it out when the client, the user
 // or the server ends it.
-func (s *Server) serveAuthenticated(sshConn *ssh.ServerConn, channels <-chan ssh.NewChannel, requests <-chan *ssh.Request, address string) {
+func (s *Server) serveAuthenticated(sshConn *ssh.ServerConn, channels <-chan ssh.NewChannel, requests <-chan *ssh.Request, address string, arrived *atomic.Int64) {
 	perms := sshConn.Permissions.Extensions
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &Conn{
@@ -306,6 +309,10 @@ func (s *Server) serveAuthenticated(sshConn *ssh.ServerConn, channels <-chan ssh
 		_ = sshConn.Close() // the loops below see the close
 	}
 
+	keepAlive := c.startKeepAlive(arrived)
+	c.mu.Lock()
+	c.keepAlive = keepAlive
+	c.mu.Unlock()
 	c.handlers.Add(1)
 	go func() {
 		defer c.handlers.Done()
@@ -318,6 +325,7 @@ func (s *Server) serveAuthenticated(sshConn *ssh.ServerConn, channels <-chan ssh
 	}
 
 	// The connection ended. The handlers are told, and waited for.
+	keepAlive.stop()
 	cancel()
 	_ = sshConn.Close() // it is closed already unless the channels ended some other way
 	c.handlers.Wait()

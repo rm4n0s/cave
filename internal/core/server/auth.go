@@ -7,6 +7,7 @@ import (
 	"github.com/rm4n0s/cave/internal/core/people"
 	"github.com/rm4n0s/errors"
 	"golang.org/x/crypto/ssh"
+	"sync/atomic"
 )
 
 // The names under which an authenticated connection's Permissions carry who it is.
@@ -135,7 +136,9 @@ func (s *Server) serve(conn net.Conn) {
 		_ = conn.Close() // the handshake sees the close; nothing else to do with its error
 	})
 	t := &tracker{}
-	sshConn, channels, requests, err := ssh.NewServerConn(conn, s.config(t))
+	// What arrives is counted, for the keepalive of docs/SPEC.md §9.9.
+	arrived := &atomic.Int64{}
+	sshConn, channels, requests, err := ssh.NewServerConn(countingConn{Conn: conn, arrived: arrived}, s.config(t))
 	grace.Stop()
 	s.settled(address)
 	if err != nil {
@@ -149,5 +152,5 @@ func (s *Server) serve(conn net.Conn) {
 		Outcome: attempts.Accepted, PersonID: perms[extPersonID], PersonName: perms[extPersonName], LoginName: sshConn.User(),
 		Address: address, ClientVersion: string(sshConn.ClientVersion()), Keys: []string{perms[extKeyFingerprint]},
 	})
-	s.serveAuthenticated(sshConn, channels, requests, address)
+	s.serveAuthenticated(sshConn, channels, requests, address, arrived)
 }

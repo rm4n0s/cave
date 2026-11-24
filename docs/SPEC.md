@@ -126,7 +126,7 @@ Files are written atomically: a temporary file in the same folder with mode `060
 | `server.port` | integer 1–65535 | `2222` | The port Cave listens on |
 | `server.address` | string | `""` | The address to listen on; empty means every interface (IPv4 and IPv6). Otherwise an IP literal |
 | `server.startOnLaunch` | boolean | `true` | Start the server when Cave starts |
-| `server.keepAliveSeconds` | integer 0–3600 | `60` | Ask an idle client whether it is alive this often; after 3 unanswered, disconnect. `0` turns it off |
+| `server.keepAliveSeconds` | integer 0–3600 | `60` | Look this often whether anything arrived from a client, and ask a silent one whether it is there; after 3 more silent looks, disconnect (§9.9). `0` turns it off |
 | `attempts.clear` | `never`, `onStart`, `hourly`, `daily`, `weekly`, `monthly` | `never` | When the attempts list is cleared (§8.4) |
 | `session.shell` | string | `""` | The shell of sessions; empty means the user's own (§9.5, §13.2) |
 | `session.acceptEnv` | list of strings | `["LANG","LC_*"]` | Names of environment variables a client may set; `*` matches any run of characters |
@@ -372,7 +372,11 @@ Version 3 of the protocol (draft-ietf-secsh-filexfer-02), as OpenSSH's `sftp-ser
 
 ### 9.9 Keepalive
 
-Every `server.keepAliveSeconds`, Cave sends `keepalive@openssh.com` wanting a reply to a connection from which nothing arrived in that time. Three in a row without anything arriving close it.
+Every `server.keepAliveSeconds`, Cave looks at what arrived from each connection. When nothing arrived in that time, it asks the client whether it is there (`keepalive@openssh.com`, wanting a reply). Anything that arrives counts as an answer, also the refusal of a client that does not know the request. When three looks in a row found nothing, the next one closes the connection: a client that is gone is disconnected after four intervals of silence (4 minutes with the default), and the log says so.
+
+- A question that is not answered stays asked; it is not sent again. The protocol answers global requests in their order, so a second one would wait behind the first, and TCP already repeats what is not acknowledged.
+- `0` turns it off. A change of the setting applies to the connections that are open: the next look is one new interval from the change, and the count of silent looks starts again.
+- The keepalive begins when a connection is authenticated; before that, the time limit of §9.2 holds.
 
 ### 9.10 The host key
 

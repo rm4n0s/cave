@@ -96,6 +96,11 @@ func New(t testing.TB) *Fixture {
 	if f.HostKey, err = hostkey.LoadOrCreate(ctx, dirs); err != nil {
 		t.Fatalf("servertest: %v", err)
 	}
+	// The keepalive is off unless a test turns it on: a test that moves the fake clock far in
+	// one step would otherwise ask a client several times in no time at all, and close it.
+	if err := f.Settings.Set(ctx, string(settings.ServerKeepAliveSeconds), 0); err != nil {
+		t.Fatalf("servertest: %v", err)
+	}
 	f.Home = homeDir(t)
 	f.Server = server.New(server.Options{
 		People: f.People, Attempts: f.Attempts, HostKey: f.HostKey.Signer(), Settings: f.Settings, Clock: f.Clock, Logger: f.Logger,

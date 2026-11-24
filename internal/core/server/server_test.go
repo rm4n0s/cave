@@ -86,6 +86,11 @@ func newStopped(t *testing.T) *fixture {
 	if f.hostKey, err = hostkey.LoadOrCreate(ctx, dirs); err != nil {
 		t.Fatal(err)
 	}
+	// The keepalive is off unless a test is about it: a test that moves the fake clock far in
+	// one step would otherwise ask a client several times in no time at all, and close it.
+	if err := f.settings.Set(ctx, string(settings.ServerKeepAliveSeconds), 0); err != nil {
+		t.Fatal(err)
+	}
 	f.server = New(Options{
 		People: f.people, Attempts: f.attempts, HostKey: f.hostKey.Signer(), Settings: f.settings, Clock: f.clock, Logger: logger,
 		Version: "test", Address: func(settings.Snapshot) string { return "127.0.0.1:0" },
