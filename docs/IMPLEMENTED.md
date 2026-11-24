@@ -291,3 +291,14 @@ One entry per finished step of `docs/IMPLEMENTATION.md`, newest last. Format:
 - **Proof**: none
 - **Manual checks**: none
 - **Glutter issues**: none
+
+## Step 4.5: Test support for the UIs
+- **Date**: 2026-11-24
+- **Branch**: feat/step-4.5-apptest
+- **Summary**: `internal/app/apptest`: the `Application` interface (what a UI calls of `*app.App`, with `var _ Application = (*app.App)(nil)`); `Fake`, an application that does nothing real, with fixed content (`Sample`: a running server, three people, one connection, nine attempts of every result and one hostile login name; `Empty`: a stopped server and nothing else), a list of the commands called (`Calls`), errors to return (`Fail`), `Emit` and `Subscribers`; `Real`, a real application in a temporary folder with its server on a loopback port the system chose (`Open`, `Person`, `Connect`, `Refuse`, `Eventually`, `Addr`). This is the last step of M4, so `devVersion` becomes `0.6.0-dev` in a second commit.
+- **Decisions**: `Calls` writes arguments with `%v` (`AddPerson(dave)`, `Set(server.port, 2200)`, `SetPersonEnabled(p_…, false)`) and quotes only free text (`AddKeys`, `SetKeyComment`'s comment), because a pasted text has newlines. `Real` reads the host public key from its file, so it follows a new host key. The sample's ids are fixed constants (`AliceID`, `BobID`, `CarolID`) that UI tests may use.
+- **Checks**: `scripts/checks.sh` passed, every check (gofmt, vet for Linux and Windows, golangci-lint, race tests as a debug build, cgo-free build and tests, Windows build, error tags: none untested, the Wine run).
+- **Tests**: `apptest`: two samples are equal; the sample has all eight results with times before `Now`, newest first, fingerprints of the right shape, and no control character (the hostile login name is there with its escape replaced); `Empty`; the calls are listed in order and written as described, `Fail` makes a command return its error, commands change nothing, `Calls` returns a copy; `Emit` reaches subscribers and not one that was cancelled; `Open` gives a running server on 127.0.0.1, a person who connects and runs a command, a refusal that leaves an entry, a helper that follows a new host key, and nothing listens after the test; the settings of the test are saved and `more` can turn the server off.
+- **Proof**: none
+- **Manual checks**: none
+- **Glutter issues**: none
