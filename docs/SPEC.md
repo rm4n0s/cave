@@ -243,6 +243,7 @@ The list holds **entries**; an attempt adds 1 to the count of the entry with the
 
 - At most 5 000 entries. When a new entry would exceed it, the entry with the oldest `lastAt` is dropped. `count` stops at 2⁵³.
 - `attempts.json`: `{"version":1,"lastClearedAt":…,"nextClearAt":…,"entries":[…]}`. It is written at most once every 5 seconds while there are changes, and when Cave closes. A flood of attempts therefore costs memory and disk bounded by the limits above.
+- A delayed write that fails is logged, and the next change tries again. Removing an entry that is not there is `AttemptNotFound`. When the file is read, its texts are made safe again, two entries of one group become one, a count past the limit becomes the limit, and of more than 5 000 entries the newest are kept; an entry that cannot be (an unknown outcome, a count below 1, a bad or repeated id, a last time before the first) is `AttemptsFileInvalid`.
 
 ## 9. The SSH server
 

@@ -93,3 +93,14 @@ One entry per finished step of `docs/IMPLEMENTATION.md`, newest last. Format:
 - **Proof**: none
 - **Manual checks**: none
 - **Glutter issues**: none
+
+## Step 1.3: The attempts list
+- **Date**: 2026-11-24
+- **Branch**: feat/step-1.3-attempts
+- **Summary**: `internal/core/attempts`: `List.Record` counts an attempt into the entry of its address, login name, outcome and person, after making every text safe and cutting it; at most 5 000 entries, the oldest dropped; `Entries`, `Remove`, `Clear`; the clearing policies (`ApplyPolicy`, `PolicyChanged`, `LastClearedAt`, `NextClearAt`); the file `attempts.json`, written 5 seconds after the first change and by `Flush`.
+- **Decisions**: (SPEC §8.5 updated) a failed delayed write is logged with the error and retried by the next change; reading the file re-sanitizes its texts, merges entries of one group, caps counts and keeps the newest 5 000; an entry that cannot be is `AttemptsFileInvalid`. `Open` takes `Options{Dirs, Clock, Logger}`. The group of an entry is made of the sanitized texts, so the same hostile name always lands in the same entry. A policy is applied by the caller (`ApplyPolicy(policy, atStart)`), which step 4.1 calls at start and once a minute. A periodic policy without a stored time (a file from before it) starts its period instead of clearing.
+- **Checks**: `scripts/checks.sh` passed, every check (gofmt, vet for Linux and Windows, golangci-lint 0 issues, race tests as a debug build, cgo-free build and tests, Windows build, error tags: none untested, the Wine run).
+- **Tests**: counting into one entry and the ten ways to get another; hostile login names, versions, addresses and keys stored safe and cut; the 5 000 limit (the oldest dropped, one refreshed by a new attempt kept); order; remove and clear; every policy with the fake clock (before, at and after the time, overdue while closed, a change restarting the period); one write per 5 seconds through a burst of 100 records, none without a change, `Flush` cancels the timer; the file's round trip; 11 broken files refused untouched; a failed delayed write logged as JSON with its route and recovered; eight writers under the race detector.
+- **Proof**: none
+- **Manual checks**: none
+- **Glutter issues**: none
