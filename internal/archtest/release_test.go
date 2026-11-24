@@ -10,6 +10,7 @@ import (
 	"context"
 	"debug/buildinfo"
 	"debug/elf"
+	"debug/macho"
 	"debug/pe"
 	"io"
 	"os"
@@ -23,9 +24,9 @@ import (
 )
 
 // TestBuildReleaseMakesEveryArchive runs scripts/build-release.sh in a temporary dist and looks
-// at what it made: the four archives with the files they should have, programs for the right
+// at what it made: the six archives with the files they should have, programs for the right
 // system and processor, builds made without cgo, and SHA256SUMS
-// that `sha256sum -c` accepts. It is heavy (it builds eight programs), so it has the tag
+// that `sha256sum -c` accepts. It is heavy (it builds twelve programs), so it has the tag
 // cave_release: scripts/heavy.sh --alone -- go test -tags cave_release -run Release ./internal/archtest
 func TestBuildReleaseMakesEveryArchive(t *testing.T) {
 	if runtime.GOOS == "windows" {
@@ -56,6 +57,7 @@ func TestBuildReleaseMakesEveryArchive(t *testing.T) {
 	sort.Strings(names)
 	want := []string{
 		"SHA256SUMS", "cave-0.0.0-test-linux-amd64.tar.gz", "cave-0.0.0-test-linux-arm64.tar.gz",
+		"cave-0.0.0-test-macos-amd64.tar.gz", "cave-0.0.0-test-macos-arm64.tar.gz",
 		"cave-0.0.0-test-windows-amd64.zip", "cave-0.0.0-test-windows-arm64.zip",
 	}
 	if strings.Join(names, " ") != strings.Join(want, " ") {
@@ -83,6 +85,26 @@ func TestBuildReleaseMakesEveryArchive(t *testing.T) {
 			}
 			if f.Machine != machine {
 				t.Errorf("%s/%s is for %v, want %v", name, program, f.Machine, machine)
+			}
+			noCgo(t, name+"/"+program, files[name+"/"+program])
+		}
+	}
+	for arch, cpu := range map[string]macho.Cpu{"amd64": macho.CpuAmd64, "arm64": macho.CpuArm64} {
+		name := "cave-" + version + "-macos-" + arch
+		files := untar(t, filepath.Join(out, name+".tar.gz"))
+		for _, file := range []string{"cave", "tcave", "README.md", "LICENSE"} {
+			if _, ok := files[name+"/"+file]; !ok {
+				t.Errorf("%s has no %s", name, file)
+			}
+		}
+		for _, program := range []string{"cave", "tcave"} {
+			f, err := macho.NewFile(bytes.NewReader(files[name+"/"+program]))
+			if err != nil {
+				t.Errorf("%s/%s is not a macOS program: %v", name, program, err)
+				continue
+			}
+			if f.Cpu != cpu {
+				t.Errorf("%s/%s is for %v, want %v", name, program, f.Cpu, cpu)
 			}
 			noCgo(t, name+"/"+program, files[name+"/"+program])
 		}

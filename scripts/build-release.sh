@@ -10,13 +10,14 @@
 # Targets (every program is cgo-free and built with -trimpath):
 #   linux/amd64, linux/arm64      cave-<v>-linux-<arch>.tar.gz   cave, tcave, cave.desktop, icons/,
 #                                                                README.md, LICENSE
+#   darwin/amd64, darwin/arm64    cave-<v>-macos-<arch>.tar.gz   cave, tcave, README.md, LICENSE
 #   windows/amd64, windows/arm64  cave-<v>-windows-<arch>.zip    cave.exe, tcave.exe, README.md,
 #                                                                LICENSE
 #
 # The Windows programs are built by scripts/build-windows.sh. This is a heavy command: run it
 # through scripts/heavy.sh --alone (CLAUDE.md "Memory (OOM)").
 #
-# Needs Go, tar, zip and sha256sum. Exit status: 0 on success; 2 when a tool is missing; 64 for a
+# Needs Go, tar (GNU or BSD), zip and sha256sum. Exit status: 0 on success; 2 when a tool is missing; 64 for a
 # usage mistake; the build's own otherwise.
 set -euo pipefail
 
@@ -55,6 +56,16 @@ trap 'rm -rf "$work"' EXIT
 mkdir -p "$out"
 rm -f "$out"/cave-"$version"-* "$out/SHA256SUMS"
 
+# pack <name>: a .tar.gz of the folder <name> of the work folder, whose files belong to root.
+if tar --version 2>/dev/null | grep -q bsdtar; then
+  owner=(--uid 0 --gid 0 --numeric-owner)
+else
+  owner=(--owner=0 --group=0 --numeric-owner)
+fi
+pack() {
+  tar -C "$work" "${owner[@]}" -czf "$out/$1.tar.gz" "$1"
+}
+
 for arch in amd64 arm64; do
   name="cave-$version-linux-$arch"
   dir="$work/$name"
@@ -65,7 +76,18 @@ for arch in amd64 arm64; do
   cp packaging/cave.desktop "$dir/"
   cp packaging/icons/*.png "$dir/icons/"
   cp README.md LICENSE "$dir/"
-  tar -C "$work" --owner=0 --group=0 --numeric-owner -czf "$out/$name.tar.gz" "$name"
+  pack "$name"
+done
+
+for arch in amd64 arm64; do
+  name="cave-$version-macos-$arch"
+  dir="$work/$name"
+  mkdir -p "$dir"
+  for program in cave tcave; do
+    GOOS=darwin GOARCH="$arch" CGO_ENABLED=0 go build -trimpath -o "$dir/$program" "./cmd/$program"
+  done
+  cp README.md LICENSE "$dir/"
+  pack "$name"
 done
 
 for arch in amd64 arm64; do

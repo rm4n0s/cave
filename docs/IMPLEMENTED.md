@@ -578,5 +578,16 @@ One entry per finished step of `docs/IMPLEMENTATION.md`, newest last. Format:
 - **Manual checks**: pending, see docs/MANUAL-CHECKS.md (step 9.3).
 - **Glutter issues**: none
 
+## Step 9.2: The scripts and the release on macOS
+- **Date**: 2026-11-25
+- **Branch**: feat/step-9.2
+- **Summary**: the scripts work with what a Mac has, and a release has archives for macOS. `scripts/heavy.sh`: macOS has bash 3.2, which has no `{fd}>` redirections, and no `flock(1)`; the slots and the gate use the fixed descriptors 7, 8 and 9, and a lock is taken with `flock(1)` when it is installed and otherwise with Perl's `flock` on the same descriptor (Perl is part of macOS); two runs were seen to wait for each other. `scripts/checks.sh` vets the code for Linux and macOS as well as Windows. `scripts/build-release.sh` also builds `cave` and `tcave` for darwin/amd64 and darwin/arm64 (`CGO_ENABLED=0`, `-trimpath`) into `cave-<v>-macos-<arch>.tar.gz` with `README.md` and `LICENSE`, and makes the archives with GNU tar or with the bsdtar of macOS (owner 0 in both).
+- **Decisions**: the macOS archives have no desktop entry and no icons (those are for Linux desktops), and the programs are plain programs, not an app bundle, and not signed or notarized (SPEC §16, §17; the guide says how to take the quarantine off).
+- **Checks**: `scripts/checks.sh --no-wine` passed, every check, on the Mac (see step 9.1 for what skips there). The release test passes: `scripts/heavy.sh --alone -- go test -count=1 -tags cave_release -run Release ./internal/archtest` (81 s).
+- **Tests**: `TestBuildReleaseMakesEveryArchive` checks six archives: the macOS ones hold Mach-O programs for the right processor, built without cgo.
+- **Proof**: none
+- **Manual checks**: none
+- **Glutter issues**: none
+
 ### The plan is finished
 Every step of `docs/IMPLEMENTATION.md` is implemented (M0 to M8). The milestones are published as `v0.1.0` to `v0.9.0`. What is left for the author: the items of `docs/MANUAL-CHECKS.md` (the tray and the notifications on a desktop, a terminal session, agent forwarding and the programs on a Windows PC, the icon on a desktop and on Windows), publishing the files of a release (`scripts/build-release.sh` makes them and uploads nothing), and the decision on `v1.0.0`. `docs/GLUTTER-ISSUES.md` has no entry: no workaround of Glutter was needed.
