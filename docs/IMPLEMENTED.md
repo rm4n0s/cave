@@ -49,3 +49,14 @@ One entry per finished step of `docs/IMPLEMENTATION.md`, newest last. Format:
 - **Proof**: none
 - **Manual checks**: none
 - **Glutter issues**: none
+
+## Step 0.4: Clock, sanitize, logging
+- **Date**: 2026-11-24
+- **Branch**: feat/step-0.4-clock-sanitize-logging
+- **Summary**: `internal/core/clock`: `Clock` (now, tickers, `AfterFunc`), the system's clock, and `clock.Fake`, whose timers and tickers fire inside `Advance`, in order, on the caller's goroutine. `internal/core/sanitize`: `Display` replaces every control character, format character, line separator and bad UTF-8 byte with U+FFFD and cuts to a number of characters with `…`. `internal/core/logging`: `ParseLevel` and `Open`, a `slog` logger over a file that starts over past 1 MiB and keeps the full one as `.1`.
+- **Decisions**: the log is JSON lines, not text (SPEC §15 updated): a logged error can then be read back as an `errors.ErrorJson` and replayed in a test, which is what the errors package is for. When the full log file cannot be put aside, the record is appended to it all the same and the write reports `LogRotateFailed`. New rule 9 of SPEC §4.2, checked by `internal/archtest`: no Go file contains an invisible character or invalid UTF-8; they are written as escapes (the test table of `sanitize` first held them raw).
+- **Checks**: `scripts/checks.sh` passed (gofmt, vet for Linux and Windows, golangci-lint 0 issues, race tests as a debug build, cgo-free build and tests, Windows build, error tags: none untested). The Wine run is skipped until step 0.5 adds its script.
+- **Tests**: the fake clock's order of firing (by time, then by creation), stop and reset, a timer made while another fires, tickers that drop unreceived ticks, concurrent use; `Display` on 30 cases (escape sequences, bidirectional overrides and isolates, zero-width and tag characters, invalid UTF-8, the cut) and a sweep of every byte and of the code points proving that nothing unsafe gets through; log levels, records at and below the level, a logged error read back with its route, rotation at and past the limit, and each write and close failure by route.
+- **Proof**: none
+- **Manual checks**: none
+- **Glutter issues**: none

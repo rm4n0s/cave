@@ -78,6 +78,7 @@ cmd/tcave ► internal/tui ┘
 6. `ssh.InsecureIgnoreHostKey` appears only in `_test.go` files and in `internal/core/sshtest`.
 7. The first argument of `errors.New`, `errors.NewErr` and `errors.NewErrf` is a string literal or a constant whose name starts with `Tag`/`tag`, and every Tag is asserted by a test (a route in `HasRoute`, a comparison with `.Tag`, or `errors.Is` with `&errors.Error{Tag: ...}`); `docs/ERROR-TAGS-UNTESTED.md` lists the exceptions with a reason each. A Tag is created at one place only: every failure case has its own (the versions of one function in the files of different platforms may share one). No error is created outside a function.
 8. The module's direct dependencies are those CLAUDE.md allows.
+9. No Go file contains an invisible character (a control or format character other than the newline and the tab) or invalid UTF-8: such a character is written as an escape (`"\u202E"`), so that what a reviewer sees is what the compiler gets.
 
 ### 4.3 Threads
 
@@ -436,7 +437,7 @@ No test, proof or check touches the user's Cave folders, `~/.ssh`, SSH agent, `~
 
 ## 15. Logging
 
-`slog` text lines to `<state>/cave.log`; when it passes 1 MiB it becomes `cave.log.1` (replacing the old one). `--log-level debug|info|warn|error` (default `info`). At `info`: start and stop, listen, every attempt with its outcome (login name and client version sanitized), every session start and end, forwards, errors. Never a private key, never the content of sessions.
+`slog` JSON lines to `<state>/cave.log` (JSON, so that a logged error can be read back as an `errors.ErrorJson` and replayed in a test); when it passes 1 MiB it becomes `cave.log.1` (replacing the old one). `--log-level debug|info|warn|error` (default `info`). At `info`: start and stop, listen, every attempt with its outcome (login name and client version sanitized), every session start and end, forwards, errors. Never a private key, never the content of sessions.
 
 ## 16. Versions and builds
 

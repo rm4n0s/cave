@@ -68,6 +68,10 @@ func TestCheckBoundariesReportsEachRule(t *testing.T) {
 		"rule 1 internal/core/bad/imports.go: internal/core imports github.com/rm4n0s/cave/internal/gui",
 		"rule 1 internal/core/bad/imports.go: internal/core imports github.com/rm4n0s/cave/internal/tui/widgets",
 		"rule 1 internal/core/bad/imports.go: internal/core imports github.com/rm4n0s/glutter/widgets",
+		// rule 9: a line with two invisible characters is reported once
+		"rule 9 internal/core/invisible/invisible.go: an invisible character (U+202E); write it as an escape",
+		"rule 9 internal/core/invisible/invisible.go: an invisible character (U+200B); write it as an escape",
+		"rule 9 internal/core/invisible/invisible.go: an invisible character (U+1B); write it as an escape",
 		// rule 5
 		`rule 5 internal/core/cgo/cgo.go: import "C": Cave is cgo-free`,
 		// rule 4: the import in the test file counts, its fmt.Errorf does not
@@ -155,6 +159,28 @@ func unreadableTree(t *testing.T) string {
 	return root
 }
 
+// unreadableFileTree makes a module with a Go file that cannot be read.
+func unreadableFileTree(t *testing.T) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows has no mode bits that make a file unreadable")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root can read any file")
+	}
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/unreadable\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "internal", "x"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "internal", "x", "x.go"), []byte("package x\n"), 0); err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
 func TestSourceErrors(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -164,6 +190,7 @@ func TestSourceErrors(t *testing.T) {
 		{"no go.mod", func(t *testing.T) string { return t.TempDir() }, "readGoMod.ArchtestGoModUnreadable"},
 		{"go.mod without a module line", func(*testing.T) string { return fixture("nomodule") }, "readGoMod.ArchtestGoModWithoutModule"},
 		{"a file that does not parse", unparsableTree, "loadSources.func1.ArchtestSourceParseFailed"},
+		{"a file that cannot be read", unreadableFileTree, "loadSources.func1.ArchtestSourceReadFailed"},
 		{"a folder that cannot be listed", unreadableTree, "loadSources.func1.ArchtestSourceWalkFailed"},
 	}
 	for _, tt := range tests {

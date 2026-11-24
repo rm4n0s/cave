@@ -16,6 +16,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/rm4n0s/errors"
 )
@@ -23,6 +25,7 @@ import (
 // The Tags of this package's errors.
 const (
 	TagSourceWalkFailed   = "ArchtestSourceWalkFailed"
+	TagSourceReadFailed   = "ArchtestSourceReadFailed"
 	TagSourceParseFailed  = "ArchtestSourceParseFailed"
 	TagGoModUnreadable    = "ArchtestGoModUnreadable"
 	TagGoModWithoutModule = "ArchtestGoModWithoutModule"
@@ -73,6 +76,8 @@ type sourceFile struct {
 	rel string
 	// test says whether it is a _test.go file.
 	test bool
+	// data is the file's content.
+	data []byte
 	fset *token.FileSet
 	ast  *ast.File
 }
@@ -121,12 +126,15 @@ func loadSources(root string) ([]*sourceFile, error) {
 			if !strings.HasSuffix(rel, ".go") {
 				return nil
 			}
-			parsed, err := parser.ParseFile(fset, filepath.Join(root, filepath.FromSlash(rel)), nil,
-				parser.ParseComments|parser.SkipObjectResolution)
+			data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
+			if err != nil {
+				return errors.NewErr(TagSourceReadFailed, err).SetMetadata("path", rel)
+			}
+			parsed, err := parser.ParseFile(fset, rel, data, parser.ParseComments|parser.SkipObjectResolution)
 			if err != nil {
 				return errors.NewErr(TagSourceParseFailed, err).SetMetadata("path", rel)
 			}
-			files = append(files, &sourceFile{rel: rel, test: strings.HasSuffix(rel, "_test.go"), fset: fset, ast: parsed})
+			files = append(files, &sourceFile{rel: rel, test: strings.HasSuffix(rel, "_test.go"), data: data, fset: fset, ast: parsed})
 			return nil
 		})
 		if err != nil {
@@ -190,7 +198,7 @@ func hasPathPrefix(path, prefix string) bool {
 	return path == prefix || strings.HasPrefix(path, prefix+"/")
 }
 
-// CheckBoundaries checks rules 1 to 6 and 8 of docs/SPEC.md §4.2 over the module at root and
+// CheckBoundaries checks rules 1 to 6, 8 and 9 of docs/SPEC.md §4.2 over the module at root and
 // returns every place that breaks one, sorted by file and line. Rule 7 is ScanTags.
 func CheckBoundaries(root string) ([]Violation, error) {
 	mod, err := readGoMod(root)
@@ -205,6 +213,7 @@ func CheckBoundaries(root string) ([]Violation, error) {
 	for _, f := range files {
 		out = append(out, checkImports(f, mod.module)...)
 		out = append(out, checkCalls(f)...)
+		out = append(out, checkInvisible(f)...)
 	}
 	for dep, line := range mod.direct {
 		allowed := false
@@ -300,5 +309,31 @@ func checkCalls(f *sourceFile) []Violation {
 		}
 		return true
 	})
+	return out
+}
+
+// checkInvisible checks one file against rule 9: no control or format character but the newline
+// and the tab, and no invalid UTF-8. Such a character is written as an escape, so that the code
+// a reviewer sees is the code the compiler gets. It reports a line once.
+func checkInvisible(f *sourceFile) []Violation {
+	var out []Violation
+	line := 1
+	reported := 0
+	for i := 0; i < len(f.data); {
+		r, size := utf8.DecodeRune(f.data[i:])
+		i += size
+		switch {
+		case r == '\n':
+			line++
+		case r == '\t':
+		case (r == utf8.RuneError && size == 1) || unicode.IsControl(r) || unicode.Is(unicode.Cf, r) ||
+			unicode.Is(unicode.Zl, r) || unicode.Is(unicode.Zp, r):
+			if reported != line {
+				reported = line
+				out = append(out, Violation{Rule: 9, File: f.rel, Line: line,
+					Message: "an invisible character (U+" + strings.ToUpper(strconv.FormatInt(int64(r), 16)) + "); write it as an escape"})
+			}
+		}
+	}
 	return out
 }
