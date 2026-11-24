@@ -319,7 +319,7 @@ The shell is `session.shell` when set; else the user's shell in `/etc/passwd`; e
 
 ### 9.6 PTY
 
-- Linux: `/dev/ptmx`, unlocked and named with `ioctl` (`TIOCSPTLCK`, `TIOCGPTN`), opened without cgo. The size comes from `pty-req` and `window-change` (`TIOCSWINSZ`; columns and rows from 1 to 4096, else the request is refused).
+- Linux: `/dev/ptmx`, unlocked and named with `ioctl` (`TIOCSPTLCK`, `TIOCGPTN`), opened without cgo. The size comes from `pty-req` and `window-change` (`TIOCSWINSZ`). Columns and rows are at most 4096, else the request is refused. Columns or rows of 0 were not said and are ignored (RFC 4254 §6.2): in `pty-req` the PTY's size stays unknown to the system (0), in `window-change` that dimension stays as it is. OpenSSH sends 0 by 0 when it asks for a PTY without a terminal of its own (`ssh -tt` in a script), so refusing it would break standard clients (§1).
 - The encoded terminal modes of `pty-req` (RFC 4254 §8) are applied to the PTY for the opcodes Linux has; unknown opcodes are skipped, and a malformed list fails the request (`PtyModesInvalid`).
 - `pty-req` is granted once per channel, and only before the process starts. Its terminal type becomes `TERM`: it must be printable ASCII without spaces, of at most 128 characters, else the request is refused (it is the client's own text and ends up in the environment); an empty type sets no `TERM`. A refused `pty-req` leaves the channel usable without a PTY. A refusal for the size, the modes or the system's error is logged with its error.
 - `window-change` without a PTY, or with a size out of range, is refused and changes nothing.

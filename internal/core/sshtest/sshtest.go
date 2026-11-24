@@ -172,6 +172,8 @@ type OpenSSH struct {
 	dir string
 	// agent is the socket of the agent the commands may use, or "".
 	agent string
+	// control is the socket of the master connection the commands share, or "".
+	control string
 }
 
 // NewOpenSSH prepares the OpenSSH programs for the server at addr ("127.0.0.1:port"), whose
@@ -216,6 +218,10 @@ func (o *OpenSSH) Options(key Key) []string {
 	if o.agent != "" {
 		agent, identitiesOnly = o.agent, "no"
 	}
+	control := "none"
+	if o.control != "" {
+		control = o.control
+	}
 	return []string{
 		"-F", "none",
 		"-o", "BatchMode=yes",
@@ -228,7 +234,7 @@ func (o *OpenSSH) Options(key Key) []string {
 		"-o", "PreferredAuthentications=publickey",
 		"-o", "PasswordAuthentication=no",
 		"-o", "KbdInteractiveAuthentication=no",
-		"-o", "ControlPath=none",
+		"-o", "ControlPath=" + control,
 		"-o", "ConnectTimeout=10",
 		"-o", "LogLevel=ERROR",
 		"-i", key.PrivatePath,
@@ -254,10 +260,17 @@ func (o *OpenSSH) Env() []string {
 // stdin as its standard input, for at most Timeout.
 func (o *OpenSSH) Run(stdin string, program string, args ...string) Result {
 	o.t.Helper()
+	return o.RunWith(nil, stdin, program, args...)
+}
+
+// RunWith is Run for a program that needs more in its environment (rsync, git): env is added
+// to the harness's environment.
+func (o *OpenSSH) RunWith(env []string, stdin string, program string, args ...string) Result {
+	o.t.Helper()
 	ctx, cancel := context.WithTimeout(context.Background(), Timeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, program, args...)
-	cmd.Env = o.Env()
+	cmd.Env = append(o.Env(), env...)
 	cmd.Dir = o.dir
 	cmd.Stdin = strings.NewReader(stdin)
 	var stdout, stderr bytes.Buffer
@@ -276,6 +289,90 @@ func (o *OpenSSH) Run(stdin string, program string, args ...string) Result {
 	return res
 }
 
+// Dir returns a folder of the harness, under the test's folder, where a test may keep the files
+// it sends and receives.
+func (o *OpenSSH) Dir() string {
+	return o.dir
+}
+
+// SSHCommand returns the command line "ssh <options> -p <port>" with the key, for the programs
+// that start ssh themselves ("rsync -e", GIT_SSH_COMMAND). They split it at spaces.
+func (o *OpenSSH) SSHCommand(key Key) string {
+	o.t.Helper()
+	words := append([]string{"ssh"}, o.Options(key)...)
+	words = append(words, "-p", o.port)
+	for _, word := range words {
+		if strings.ContainsAny(word, " \t'\"\\") {
+			o.t.Fatalf("sshtest: %q cannot be put in a command line", word)
+		}
+	}
+	return strings.Join(words, " ")
+}
+
+// StartMaster starts a master connection as user ("ssh -M -N") that the commands that follow
+// share: each of them is then a session of that one connection. The returned function ends the
+// master ("ssh -O exit") and waits for it; the master is killed when the test ends, whatever
+// happened.
+func (o *OpenSSH) StartMaster(user string, key Key) (stop func()) {
+	o.t.Helper()
+	// A socket's path must be short: t.TempDir() can be too long.
+	dir, err := os.MkdirTemp("", "cave-mux-")
+	if err != nil {
+		o.t.Fatalf("sshtest: %v", err)
+	}
+	o.t.Cleanup(func() {
+		if err := os.RemoveAll(dir); err != nil {
+			o.t.Errorf("sshtest: %v", err)
+		}
+	})
+	o.control = filepath.Join(dir, "master.sock")
+	args := append(o.Options(key), "-M", "-N", "-p", o.port, user+"@"+o.host)
+	master := exec.Command("ssh", args...)
+	master.Env = o.Env()
+	master.Dir = o.dir
+	var stderr bytes.Buffer
+	master.Stderr = &stderr
+	if err := master.Start(); err != nil {
+		o.t.Fatalf("sshtest: ssh -M: %v", err)
+	}
+	ended := make(chan struct{})
+	go func() {
+		_ = master.Wait() // how it ended does not matter: it is ended on purpose
+		close(ended)
+	}()
+	o.t.Cleanup(func() {
+		_ = master.Process.Kill() // already gone after stop
+		<-ended
+	})
+	control := func(command string) Result {
+		return o.Run("", "ssh", append(o.Options(key), "-O", command, "-p", o.port, user+"@"+o.host)...)
+	}
+	deadline := time.Now().Add(Timeout)
+	for control("check").ExitCode != 0 {
+		select {
+		case <-ended:
+			o.t.Fatalf("sshtest: the master connection ended: %s", stderr.String())
+		default:
+		}
+		if time.Now().After(deadline) {
+			o.t.Fatalf("sshtest: the master connection is not ready: %s", stderr.String())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	return func() {
+		o.t.Helper()
+		if res := control("exit"); res.ExitCode != 0 {
+			o.t.Errorf("sshtest: ssh -O exit: %+v", res)
+		}
+		select {
+		case <-ended:
+		case <-time.After(Timeout):
+			o.t.Errorf("sshtest: the master connection did not end")
+		}
+		o.control = ""
+	}
+}
+
 // SSH runs "ssh <options> user@host <command>" with the key. options are more options of ssh
 // itself (such as "-tt" or "-A"), and command is what the server is asked to run; without a
 // command, ssh asks for a shell. stdin is what the remote side reads.
@@ -285,21 +382,34 @@ func (o *OpenSSH) SSH(stdin, user string, key Key, options []string, command ...
 	full = append(full, options...)
 	full = append(full, user+"@"+o.host)
 	full = append(full, command...)
-	return o.Run(stdin, "ssh", full...)
+	res := o.Run(stdin, "ssh", full...)
+	o.log(res, "ssh", append(append(append([]string{}, options...), user+"@"+o.host), command...))
+	return res
 }
 
 // SFTP runs sftp in batch mode with the commands of batch, one per line.
 func (o *OpenSSH) SFTP(user string, key Key, batch string) Result {
 	o.t.Helper()
 	full := append(o.Options(key), "-P", o.port, "-b", "-", user+"@"+o.host)
-	return o.Run(batch, "sftp", full...)
+	res := o.Run(batch, "sftp", full...)
+	o.log(res, "sftp", []string{"-b", "-", user + "@" + o.host})
+	return res
 }
 
 // SCP runs scp with the arguments; Remote makes the remote ones.
 func (o *OpenSSH) SCP(key Key, args ...string) Result {
 	o.t.Helper()
 	full := append(o.Options(key), "-P", o.port)
-	return o.Run("", "scp", append(full, args...)...)
+	res := o.Run("", "scp", append(full, args...)...)
+	o.log(res, "scp", args)
+	return res
+}
+
+// log writes a command and its exit status to the test's log, without the options every command
+// gets, so that a verbose run reads as a transcript.
+func (o *OpenSSH) log(res Result, program string, args []string) {
+	o.t.Helper()
+	o.t.Logf("$ %s %s  (exit status %d)", program, strings.Join(args, " "), res.ExitCode)
 }
 
 // Remote returns "user@host:path" for scp.

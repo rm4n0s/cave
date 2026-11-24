@@ -15,9 +15,10 @@ func TestSizeCheck(t *testing.T) {
 		{Size{Cols: 80, Rows: 24}, true},
 		{Size{Cols: 1, Rows: 1}, true},
 		{Size{Cols: MaxCells, Rows: MaxCells, Width: 1 << 20, Height: 1 << 20}, true},
-		{Size{Cols: 0, Rows: 24}, false},
-		{Size{Cols: 80, Rows: 0}, false},
-		{Size{}, false},
+		// A dimension of 0 was not said: "ssh -tt" without a terminal of its own sends 0 by 0.
+		{Size{Cols: 0, Rows: 24}, true},
+		{Size{Cols: 80, Rows: 0}, true},
+		{Size{}, true},
 		{Size{Cols: MaxCells + 1, Rows: 24}, false},
 		{Size{Cols: 80, Rows: MaxCells + 1}, false},
 		{Size{Cols: 1 << 31, Rows: 1 << 31}, false},

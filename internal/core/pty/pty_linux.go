@@ -121,12 +121,25 @@ func (p *Pty) CloseSlave() {
 }
 
 // Resize changes the terminal's size, which tells the process in the foreground (SIGWINCH).
+// Columns or rows that are 0 were not said and stay as they are: unknown (0) in a new terminal.
 func (p *Pty) Resize(size Size) error {
 	if err := size.Check(); err != nil {
 		return err
 	}
-	ws := &unix.Winsize{Col: uint16(size.Cols), Row: uint16(size.Rows), Xpixel: clamp16(size.Width), Ypixel: clamp16(size.Height)}
-	err := control(p.master, func(fd int) error { return unix.IoctlSetWinsize(fd, unix.TIOCSWINSZ, ws) })
+	err := control(p.master, func(fd int) error {
+		ws, err := unix.IoctlGetWinsize(fd, unix.TIOCGWINSZ)
+		if err != nil {
+			return err
+		}
+		if size.Cols != 0 {
+			ws.Col = uint16(size.Cols)
+		}
+		if size.Rows != 0 {
+			ws.Row = uint16(size.Rows)
+		}
+		ws.Xpixel, ws.Ypixel = clamp16(size.Width), clamp16(size.Height)
+		return unix.IoctlSetWinsize(fd, unix.TIOCSWINSZ, ws)
+	})
 	if err != nil {
 		return errors.NewErr(TagResizeFailed, err).SetMetadata("pty", p.name)
 	}

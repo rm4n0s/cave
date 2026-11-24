@@ -140,9 +140,11 @@ func TestWindowChange(t *testing.T) {
 	if got := readLine(t, reader); got != "43 132" {
 		t.Errorf("the size after window-change is %q", got)
 	}
+	// Dimensions of 0 were not said: the request is granted and changes nothing.
+	if ok, err := sess.SendRequest("window-change", true, ssh.Marshal(windowChange{})); err != nil || !ok {
+		t.Errorf("a window-change that says no size = %v, %v", ok, err)
+	}
 	for name, size := range map[string]windowChange{
-		"no columns":       {Cols: 0, Rows: 24},
-		"no rows":          {Cols: 80, Rows: 0},
 		"too many columns": {Cols: pty.MaxCells + 1, Rows: 24},
 		"too many rows":    {Cols: 80, Rows: pty.MaxCells + 1},
 	} {
@@ -161,6 +163,24 @@ func TestWindowChange(t *testing.T) {
 	}
 	if err := sess.Wait(); err != nil {
 		t.Errorf("the session ended with %v", err)
+	}
+}
+
+func TestATerminalWhoseSizeIsNotSaid(t *testing.T) {
+	// What "ssh -tt" sends from a script, which has no terminal of its own (RFC 4254 §6.2: zero
+	// dimensions are ignored).
+	f := newFixture(t, nil)
+	sess, err := f.client.NewSession()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = sess.Close() }()
+	if ok, err := sess.SendRequest("pty-req", true, ssh.Marshal(ptyRequest{Term: "dumb", Modes: echoOff})); err != nil || !ok {
+		t.Fatalf("pty-req = %v, %v", ok, err)
+	}
+	got := finish(t, sess, "", func() error { return sess.Run("test -t 0 && stty size") })
+	if got.stdout != "0 0\r\n" || got.status != 0 {
+		t.Errorf("%+v", got)
 	}
 }
 
@@ -185,8 +205,6 @@ func TestPtyRequestsThatAreRefused(t *testing.T) {
 		wantTag   string
 		wantRoute string
 	}{
-		{"no columns", ssh.Marshal(ptyRequest{Term: "xterm", Cols: 0, Rows: 24}), pty.TagSizeInvalid, "Open->open->Size.Check.PtySizeInvalid"},
-		{"no rows", ssh.Marshal(ptyRequest{Term: "xterm", Cols: 80, Rows: 0}), pty.TagSizeInvalid, "Open->open->Size.Check.PtySizeInvalid"},
 		{"too many columns", ssh.Marshal(ptyRequest{Term: "xterm", Cols: pty.MaxCells + 1, Rows: 24}), pty.TagSizeInvalid, "Open->open->Size.Check.PtySizeInvalid"},
 		{"too many rows", ssh.Marshal(ptyRequest{Term: "xterm", Cols: 80, Rows: pty.MaxCells + 1}), pty.TagSizeInvalid, "Open->open->Size.Check.PtySizeInvalid"},
 		{

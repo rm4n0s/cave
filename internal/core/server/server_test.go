@@ -896,7 +896,7 @@ func TestStopGivesUpWhenTheContextEnds(t *testing.T) {
 	close(stuck)
 }
 
-func TestTheRealSSHIsRefusedAndAccepted(t *testing.T) {
+func TestOpenSSHIsRefusedAndAccepted(t *testing.T) {
 	f := newFixture(t)
 	_, key := f.person("alice")
 	stranger := sshtest.NewKey(t, sshtest.Ed25519)

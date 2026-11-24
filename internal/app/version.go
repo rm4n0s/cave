@@ -9,7 +9,7 @@ import (
 
 // devVersion is the version being developed. It is what Version returns for a build that is not
 // made from a release tag. Bump it when a version is published (CLAUDE.md "Git and GitHub").
-const devVersion = "0.3.0-dev"
+const devVersion = "0.4.0-dev"
 
 // releaseVersion matches the module version of a build made from a release tag, and nothing else:
 // not "(devel)", not a pseudo-version, not a tag with "+dirty".

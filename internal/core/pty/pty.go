@@ -33,18 +33,21 @@ const (
 	opFirstUndefined = 160
 )
 
-// Size is the size of a terminal window.
+// Size is the size of a terminal window, as a client says it. A dimension that is 0 was not
+// said, and is ignored (RFC 4254 §6.2): OpenSSH sends 0 by 0 when it asks for a terminal without
+// having one itself ("ssh -tt" in a script).
 type Size struct {
-	// Cols and Rows are the size in character cells, from 1 to MaxCells.
+	// Cols and Rows are the size in character cells, at most MaxCells; 0 when the client does
+	// not say.
 	Cols, Rows uint32
 	// Width and Height are the size in pixels; 0 when the client does not say.
 	Width, Height uint32
 }
 
-// Check refuses a size whose columns or rows are not between 1 and MaxCells.
+// Check refuses a size with more than MaxCells columns or rows.
 func (s Size) Check() error {
-	if s.Cols < 1 || s.Cols > MaxCells || s.Rows < 1 || s.Rows > MaxCells {
-		return errors.New(TagSizeInvalid, "a terminal has between 1 and 4096 columns and rows", "cols", s.Cols, "rows", s.Rows)
+	if s.Cols > MaxCells || s.Rows > MaxCells {
+		return errors.New(TagSizeInvalid, "a terminal has at most 4096 columns and rows", "cols", s.Cols, "rows", s.Rows)
 	}
 	return nil
 }

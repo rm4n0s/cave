@@ -113,10 +113,26 @@ func TestResize(t *testing.T) {
 	if got := winsize(t, p); got != (unix.Winsize{Row: 50, Col: 200, Xpixel: 65535, Ypixel: 3}) {
 		t.Errorf("the size is %+v", got)
 	}
-	errtest.Route(t, p.Resize(Size{Cols: 0, Rows: 50}), "Pty.Resize->Size.Check.PtySizeInvalid")
+	errtest.Route(t, p.Resize(Size{Cols: 5000, Rows: 50}), "Pty.Resize->Size.Check.PtySizeInvalid")
 	errtest.Route(t, p.Resize(Size{Cols: 80, Rows: 5000}), "Pty.Resize->Size.Check.PtySizeInvalid")
 	if got := winsize(t, p); got.Col != 200 || got.Row != 50 {
 		t.Errorf("a refused size changed the terminal: %+v", got)
+	}
+	// A dimension that is 0 was not said, and stays as it is.
+	for _, tt := range []struct {
+		size Size
+		want unix.Winsize
+	}{
+		{Size{Cols: 0, Rows: 60}, unix.Winsize{Row: 60, Col: 200}},
+		{Size{Cols: 90, Rows: 0, Width: 720}, unix.Winsize{Row: 60, Col: 90, Xpixel: 720}},
+		{Size{}, unix.Winsize{Row: 60, Col: 90}},
+	} {
+		if err := p.Resize(tt.size); err != nil {
+			t.Fatal(err)
+		}
+		if got := winsize(t, p); got != tt.want {
+			t.Errorf("after %+v the size is %+v, want %+v", tt.size, got, tt.want)
+		}
 	}
 	if err := p.Close(); err != nil {
 		t.Fatal(err)
@@ -207,7 +223,7 @@ func TestOpenErrors(t *testing.T) {
 	good := Size{Cols: 80, Rows: 24}
 	t.Run("a size that is not acceptable", func(t *testing.T) {
 		before := openFiles(t)
-		_, err := Open(Size{Cols: 0, Rows: 24}, nil)
+		_, err := Open(Size{Cols: MaxCells + 1, Rows: 24}, nil)
 		errtest.Route(t, err, "Open->open->Size.Check.PtySizeInvalid")
 		if after := openFiles(t); after != before {
 			t.Errorf("%d files are open, %d before", after, before)
@@ -331,5 +347,20 @@ func TestCloseEndsAReadThatIsWaiting(t *testing.T) {
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("the read is still waiting after the master was closed")
+	}
+}
+
+func TestOpenWithASizeThatIsNotSaid(t *testing.T) {
+	// "ssh -tt" in a script has no terminal of its own and asks for 0 by 0: the terminal is made,
+	// and its size is unknown to the system until a window-change says it.
+	p := openPty(t, Size{}, nil)
+	if got := winsize(t, p); got != (unix.Winsize{}) {
+		t.Errorf("the size is %+v, want it unknown", got)
+	}
+	if err := p.Resize(Size{Cols: 80, Rows: 24}); err != nil {
+		t.Fatal(err)
+	}
+	if got := winsize(t, p); got != (unix.Winsize{Row: 24, Col: 80}) {
+		t.Errorf("the size is %+v", got)
 	}
 }
