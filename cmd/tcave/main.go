@@ -15,6 +15,8 @@ import (
 const (
 	// tagTcaveUsage is the error of a command line that tcave does not understand.
 	tagTcaveUsage = "TcaveUsage"
+	// tagTcaveUnexpectedArgument is the error of an argument where tcave takes only flags.
+	tagTcaveUnexpectedArgument = "TcaveUnexpectedArgument"
 	// tagTcaveVersionWriteFailed is the error of a version that could not be printed.
 	tagTcaveVersionWriteFailed = "TcaveVersionWriteFailed"
 	// tagTcaveNotBuiltYet is the error of starting the TUI before step 5.1 builds it.
@@ -24,7 +26,7 @@ const (
 func main() {
 	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintln(os.Stderr, "tcave:", err)
-		if appErr, ok := errors.FromError(err); ok && appErr.Tag == tagTcaveUsage {
+		if appErr, ok := errors.FromError(err); ok && (appErr.Tag == tagTcaveUsage || appErr.Tag == tagTcaveUnexpectedArgument) {
 			os.Exit(2)
 		}
 		os.Exit(1)
@@ -40,7 +42,7 @@ func run(args []string, stdout, _ io.Writer) error {
 		return errors.NewErr(tagTcaveUsage, err)
 	}
 	if fs.NArg() > 0 {
-		return errors.New(tagTcaveUsage, "unexpected argument", "argument", fs.Arg(0))
+		return errors.New(tagTcaveUnexpectedArgument, "unexpected argument", "argument", fs.Arg(0))
 	}
 	if *version {
 		if _, err := fmt.Fprintln(stdout, "tcave", app.Version()); err != nil {

@@ -15,7 +15,7 @@ Cave does the job of `sshd` as an application that an ordinary user starts, watc
 |---|---|---|
 | D1 | The development process and error handling are those of Emetos's `CLAUDE.md` | the user, 2026-11-24 |
 | D2 | Go, cgo-free. The SSH protocol is `golang.org/x/crypto/ssh` | follows D1 |
-| D3 | The desktop UI is built on Glutter, with its Material 3 widgets | the user's toolkit; Cave is a form-and-list app, so Material fits |
+| D3 | The desktop UI is built on Glutter, with its Material 3 widgets | the user, 2026-11-24 ("use Glutter library for the GUI"); Cave is a form-and-list app, so Material fits |
 | D4 | The TUI is built on Bubble Tea v2 and Lip Gloss v2 (`charm.land/...`), and on nothing else of Charm (no `bubbles`): Cave's own list, table and text field are in `internal/tui` | the user, 2026-11-24 |
 | D5 | Besides shell, `exec` and PTY, Cave has the SFTP subsystem, TCP port forwarding (`-L`, `-R`, `-D`) and agent forwarding. No X11 forwarding | the user, 2026-11-24 |
 | D6 | Linux and Windows first, Windows tested under Wine; macOS later | the user, 2026-11-24 |
@@ -76,7 +76,7 @@ cmd/tcave ► internal/tui ┘
 4. No file imports the standard library `errors`, and no non-test file calls `fmt.Errorf`.
 5. No file contains `import "C"`.
 6. `ssh.InsecureIgnoreHostKey` appears only in `_test.go` files and in `internal/core/sshtest`.
-7. The first argument of `errors.New`, `errors.NewErr` and `errors.NewErrf` is a string literal or a constant whose name starts with `Tag`/`tag`, and every Tag is asserted by a test (a route in `HasRoute`, a comparison with `.Tag`, or `errors.Is` with `&errors.Error{Tag: ...}`); `docs/ERROR-TAGS-UNTESTED.md` lists the exceptions with a reason each.
+7. The first argument of `errors.New`, `errors.NewErr` and `errors.NewErrf` is a string literal or a constant whose name starts with `Tag`/`tag`, and every Tag is asserted by a test (a route in `HasRoute`, a comparison with `.Tag`, or `errors.Is` with `&errors.Error{Tag: ...}`); `docs/ERROR-TAGS-UNTESTED.md` lists the exceptions with a reason each. A Tag is created at one place only: every failure case has its own (the versions of one function in the files of different platforms may share one). No error is created outside a function.
 8. The module's direct dependencies are those CLAUDE.md allows.
 
 ### 4.3 Threads

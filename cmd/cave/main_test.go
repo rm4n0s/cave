@@ -26,7 +26,7 @@ func TestRun(t *testing.T) {
 		{name: "version", args: []string{"--version"}, wantOut: "cave " + app.Version() + "\n"},
 		{name: "version with one dash", args: []string{"-version"}, wantOut: "cave " + app.Version() + "\n"},
 		{name: "unknown flag", args: []string{"--nope"}, wantRoute: "run.CaveUsage"},
-		{name: "unexpected argument", args: []string{"extra"}, wantRoute: "run.CaveUsage"},
+		{name: "unexpected argument", args: []string{"extra"}, wantRoute: "run.CaveUnexpectedArgument"},
 		{
 			name: "version to a closed stream", args: []string{"--version"}, stdout: failingWriter{},
 			wantRoute: "run.CaveVersionWriteFailed", wantOrigin: io.ErrClosedPipe,

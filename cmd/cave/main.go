@@ -15,6 +15,8 @@ import (
 const (
 	// tagCaveUsage is the error of a command line that cave does not understand.
 	tagCaveUsage = "CaveUsage"
+	// tagCaveUnexpectedArgument is the error of an argument where cave takes only flags.
+	tagCaveUnexpectedArgument = "CaveUnexpectedArgument"
 	// tagCaveVersionWriteFailed is the error of a version that could not be printed.
 	tagCaveVersionWriteFailed = "CaveVersionWriteFailed"
 	// tagCaveNotBuiltYet is the error of starting the desktop app before step 6.1 builds it.
@@ -24,7 +26,7 @@ const (
 func main() {
 	if err := run(os.Args[1:], os.Stdout, os.Stderr); err != nil {
 		fmt.Fprintln(os.Stderr, "cave:", err)
-		if appErr, ok := errors.FromError(err); ok && appErr.Tag == tagCaveUsage {
+		if appErr, ok := errors.FromError(err); ok && (appErr.Tag == tagCaveUsage || appErr.Tag == tagCaveUnexpectedArgument) {
 			os.Exit(2)
 		}
 		os.Exit(1)
@@ -40,7 +42,7 @@ func run(args []string, stdout, _ io.Writer) error {
 		return errors.NewErr(tagCaveUsage, err)
 	}
 	if fs.NArg() > 0 {
-		return errors.New(tagCaveUsage, "unexpected argument", "argument", fs.Arg(0))
+		return errors.New(tagCaveUnexpectedArgument, "unexpected argument", "argument", fs.Arg(0))
 	}
 	if *version {
 		if _, err := fmt.Fprintln(stdout, "cave", app.Version()); err != nil {

@@ -1,0 +1,189 @@
+package archtest
+
+import (
+	"os"
+	"path/filepath"
+	"runtime"
+	"sort"
+	"strings"
+	"testing"
+
+	"github.com/rm4n0s/errors"
+)
+
+// moduleRoot returns the root of Cave's module, two folders above this package.
+func moduleRoot(t *testing.T) string {
+	t.Helper()
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+// fixture returns the path of a fixture tree.
+func fixture(name string) string {
+	return filepath.Join("testdata", name)
+}
+
+func TestModuleKeepsTheBoundaries(t *testing.T) {
+	violations, err := CheckBoundaries(moduleRoot(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range violations {
+		t.Error(v.String())
+	}
+}
+
+func TestCheckBoundariesReportsEachRule(t *testing.T) {
+	violations, err := CheckBoundaries(fixture("boundaries"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	for _, v := range violations {
+		if v.Line <= 0 {
+			t.Errorf("%s has no line", v.String())
+		}
+		got = append(got, "rule "+string(rune('0'+v.Rule))+" "+v.File+": "+v.Message)
+	}
+	want := []string{
+		// rule 3: cmd/cave may import Glutter and internal/gui, not the TUI's packages
+		"rule 3 cmd/cave/bad.go: Bubble Tea and Lip Gloss may be imported only under internal/tui and cmd/tcave, not charm.land/lipgloss/v2 here",
+		"rule 3 cmd/cave/bad.go: only internal/tui and cmd/tcave may import github.com/rm4n0s/cave/internal/tui",
+		// rule 3: cmd/tcave may import Bubble Tea and internal/tui, not the desktop's packages
+		"rule 3 cmd/tcave/bad.go: only internal/gui and cmd/cave may import github.com/rm4n0s/cave/internal/gui",
+		"rule 3 cmd/tcave/bad.go: Glutter may be imported only under internal/gui and cmd/cave, not github.com/rm4n0s/glutter/widgets here",
+		// rule 8
+		"rule 8 go.mod: the dependency github.com/evil/dependency is not one CLAUDE.md allows",
+		"rule 8 go.mod: the dependency github.com/evil/single is not one CLAUDE.md allows",
+		// rule 2
+		"rule 2 internal/app/bad.go: internal/app imports charm.land/lipgloss/v2",
+		"rule 2 internal/app/bad.go: internal/app imports github.com/rm4n0s/cave/internal/gui",
+		"rule 2 internal/app/bad.go: internal/app imports github.com/rm4n0s/glutter",
+		// rule 1
+		"rule 1 internal/core/bad/imports.go: internal/core imports charm.land/bubbletea/v2",
+		"rule 1 internal/core/bad/imports.go: internal/core imports github.com/rm4n0s/cave/internal/app",
+		"rule 1 internal/core/bad/imports.go: internal/core imports github.com/rm4n0s/cave/internal/gui",
+		"rule 1 internal/core/bad/imports.go: internal/core imports github.com/rm4n0s/cave/internal/tui/widgets",
+		"rule 1 internal/core/bad/imports.go: internal/core imports github.com/rm4n0s/glutter/widgets",
+		// rule 5
+		`rule 5 internal/core/cgo/cgo.go: import "C": Cave is cgo-free`,
+		// rule 4: the import in the test file counts, its fmt.Errorf does not
+		"rule 4 internal/core/errs/errs.go: the standard library errors package is imported; use github.com/rm4n0s/errors",
+		"rule 4 internal/core/errs/errs.go: fmt.Errorf is used; use github.com/rm4n0s/errors",
+		"rule 4 internal/core/errs/errs_test.go: the standard library errors package is imported; use github.com/rm4n0s/errors",
+		// rule 6: not in the test file, not in sshtest
+		"rule 6 internal/core/server/insecure.go: InsecureIgnoreHostKey outside tests and internal/core/sshtest",
+		// rule 3
+		"rule 3 internal/gui/bad.go: Bubble Tea and Lip Gloss may be imported only under internal/tui and cmd/tcave, not charm.land/bubbletea/v2 here",
+		"rule 3 internal/gui/bad.go: only internal/tui and cmd/tcave may import github.com/rm4n0s/cave/internal/tui",
+		"rule 3 internal/tui/bad.go: only internal/gui and cmd/cave may import github.com/rm4n0s/cave/internal/gui",
+		"rule 3 internal/tui/bad.go: Glutter may be imported only under internal/gui and cmd/cave, not github.com/rm4n0s/glutter/widgets here",
+	}
+	sortedGot := append([]string(nil), got...)
+	sort.Strings(sortedGot)
+	sort.Strings(want)
+	if strings.Join(sortedGot, "\n") != strings.Join(want, "\n") {
+		t.Errorf("violations:\n%s\n\nwant:\n%s", strings.Join(sortedGot, "\n"), strings.Join(want, "\n"))
+	}
+	// The result is sorted by file, then line.
+	for i := 1; i < len(violations); i++ {
+		a, b := violations[i-1], violations[i]
+		if a.File > b.File || (a.File == b.File && a.Line > b.Line) {
+			t.Errorf("not sorted: %s before %s", a.String(), b.String())
+		}
+	}
+}
+
+func TestViolationString(t *testing.T) {
+	v := Violation{Rule: 4, File: "internal/x/x.go", Line: 12, Message: "fmt.Errorf is used"}
+	if got, want := v.String(), "internal/x/x.go:12: rule 4: fmt.Errorf is used"; got != want {
+		t.Errorf("String() = %q, want %q", got, want)
+	}
+}
+
+// unparsableTree copies the unparsable fixture into a temporary folder, giving its broken file
+// the .go name that the repository's own tools must not see.
+func unparsableTree(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	for _, f := range []struct{ from, to string }{
+		{"go.mod", "go.mod"},
+		{filepath.Join("internal", "x", "x.go.txt"), filepath.Join("internal", "x", "x.go")},
+	} {
+		data, err := os.ReadFile(filepath.Join(fixture("unparsable"), f.from))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(root, f.to)), 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, f.to), data, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return root
+}
+
+// unreadableTree makes a module with a source folder that cannot be listed.
+func unreadableTree(t *testing.T) string {
+	t.Helper()
+	if runtime.GOOS == "windows" {
+		t.Skip("Windows has no mode bits that make a folder unlistable")
+	}
+	if os.Geteuid() == 0 {
+		t.Skip("root can list any folder")
+	}
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "go.mod"), []byte("module example.com/unreadable\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	locked := filepath.Join(root, "internal", "locked")
+	if err := os.MkdirAll(locked, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(locked, 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := os.Chmod(locked, 0o700); err != nil {
+			t.Error(err)
+		}
+	})
+	return root
+}
+
+func TestSourceErrors(t *testing.T) {
+	tests := []struct {
+		name      string
+		root      func(t *testing.T) string
+		wantRoute string
+	}{
+		{"no go.mod", func(t *testing.T) string { return t.TempDir() }, "readGoMod.ArchtestGoModUnreadable"},
+		{"go.mod without a module line", func(*testing.T) string { return fixture("nomodule") }, "readGoMod.ArchtestGoModWithoutModule"},
+		{"a file that does not parse", unparsableTree, "loadSources.func1.ArchtestSourceParseFailed"},
+		{"a folder that cannot be listed", unreadableTree, "loadSources.func1.ArchtestSourceWalkFailed"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := tt.root(t)
+			checks := map[string]func() error{
+				"CheckBoundaries": func() error { _, err := CheckBoundaries(root); return err },
+				"ScanTags":        func() error { _, err := ScanTags(root); return err },
+			}
+			for name, check := range checks {
+				err := check()
+				appErr, ok := errors.FromError(err)
+				if !ok {
+					t.Fatalf("%s: expected *errors.Error, got %T: %v", name, err, err)
+				}
+				// The walk's own frames (fs.WalkDir) are in the route between loadSources and its callback.
+				if !appErr.HasRoute(name+"->") || !appErr.HasRoute(tt.wantRoute) {
+					t.Errorf("%s: unexpected failure path: %s", name, appErr.Route())
+				}
+			}
+		})
+	}
+}
