@@ -1,3 +1,5 @@
+//go:build linux || darwin
+
 package session
 
 import (
@@ -46,17 +48,13 @@ func (f *fixture) ptySession() *ssh.Session {
 // terminals counts the pseudo terminals this process has open, either side.
 func terminals(t *testing.T) int {
 	t.Helper()
-	entries, err := os.ReadDir("/proc/self/fd")
+	entries, err := os.ReadDir(fdDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	count := 0
 	for _, entry := range entries {
-		target, err := os.Readlink("/proc/self/fd/" + entry.Name())
-		if err != nil {
-			continue // the descriptor of the listing itself
-		}
-		if target == "/dev/ptmx" || strings.HasPrefix(target, "/dev/pts/") {
+		if fdIsTerminal(entry.Name()) {
 			count++
 		}
 	}
@@ -93,7 +91,7 @@ func TestASessionWithATerminal(t *testing.T) {
 		return sess.Run(`tty; echo "$SSH_TTY"; echo "$TERM"; echo to the error stream >&2; exit 5`)
 	})
 	// A terminal has one stream, and ends its lines with a carriage return and a line feed.
-	want := regexp.MustCompile(`^(/dev/pts/\d+)\r\n(/dev/pts/\d+)\r\nxterm-256color\r\nto the error stream\r\n$`)
+	want := regexp.MustCompile(`^(` + ttyPattern + `)\r\n(` + ttyPattern + `)\r\nxterm-256color\r\nto the error stream\r\n$`)
 	match := want.FindStringSubmatch(got.stdout)
 	if match == nil || match[1] != match[2] || got.stderr != "" || got.status != 5 {
 		t.Errorf("%+v", got)
@@ -311,7 +309,7 @@ func TestTerminalModes(t *testing.T) {
 		{"the defaults", ssh.TerminalModes{}, []string{" echo ", " icrnl ", "erase = ^?"}},
 		{"no echo", ssh.TerminalModes{ssh.ECHO: 0}, []string{" -echo ", " icrnl "}},
 		{"several", ssh.TerminalModes{ssh.ECHO: 0, ssh.ICRNL: 0, ssh.VERASE: 8, ssh.TTY_OP_ISPEED: 38400}, []string{" -echo ", "-icrnl ", "erase = ^H"}},
-		{"an opcode Linux does not have", ssh.TerminalModes{17: 1, ssh.ECHO: 0}, []string{" -echo "}},
+		{"an opcode the system does not have", ssh.TerminalModes{17: 1, ssh.ECHO: 0}, []string{" -echo "}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

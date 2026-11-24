@@ -18,7 +18,7 @@ Cave does the job of `sshd` as an application that an ordinary user starts, watc
 | D3 | The desktop UI is built on Glutter, with its Material 3 widgets | the user, 2026-11-24 ("use Glutter library for the GUI"); Cave is a form-and-list app, so Material fits |
 | D4 | The TUI is built on Bubble Tea v2 and Lip Gloss v2 (`charm.land/...`), and on nothing else of Charm (no `bubbles`): Cave's own list, table and text field are in `internal/tui` | the user, 2026-11-24 |
 | D5 | Besides shell, `exec` and PTY, Cave has the SFTP subsystem, TCP port forwarding (`-L`, `-R`, `-D`) and agent forwarding. No X11 forwarding | the user, 2026-11-24 |
-| D6 | Linux and Windows first, Windows tested under Wine; macOS later | the user, 2026-11-24 |
+| D6 | Linux and Windows first, Windows tested under Wine; macOS later. macOS came in M9 | the user, 2026-11-24; macOS: the user, 2026-11-25 ("make it work for macos") |
 | D7 | The login name of a client must be the name of a person in Cave, and the key must be one of that person's | the user, 2026-11-24 |
 | D8 | Two programs, `cave` (desktop) and `tcave` (terminal), over one application layer and the same files. One instance at a time per configuration folder | Windows separates GUI and console programs; the TUI must not need a display. The name `tcave`: the user, 2026-11-24 |
 | D9 | Every session runs as the OS user who started Cave, with that user's rights | Cave has no root, so it cannot change user |
@@ -30,7 +30,7 @@ Cave does the job of `sshd` as an application that an ordinary user starts, watc
 
 - **Linux**: x86-64 and arm64, a kernel with `/dev/ptmx` and devpts. The desktop app needs what Glutter needs (Wayland or X11; Vulkan or OpenGL ES 3.0, else its software renderer). The TUI needs a terminal.
 - **Windows**: 10 version 1809 or later (ConPTY), x86-64 and arm64. Section 13.
-- **macOS**: not yet. No file may assume that "not Windows" means Linux: Linux-only code is in `_linux.go` files.
+- **macOS**: 14 or later, arm64 and x86-64. The desktop app draws with Metal through Glutter, without cgo; the TUI needs a terminal. What Linux and macOS share is in `_unix.go` files (`//go:build linux || darwin`); what differs is in `_linux.go` and `_darwin.go` files with the same function names. No file may assume that "not Windows" means Linux.
 - Go 1.27. No cgo anywhere.
 
 ## 4. Architecture
@@ -90,11 +90,11 @@ The server accepts each connection on its own goroutine; sessions, SFTP and forw
 
 ### 5.1 Folders
 
-| | Linux | Windows |
-|---|---|---|
-| Configuration | `$XDG_CONFIG_HOME/cave` (else `~/.config/cave`) | `%AppData%\Cave` |
-| State | `$XDG_STATE_HOME/cave` (else `~/.local/state/cave`) | `%LocalAppData%\Cave` |
-| Runtime (agent sockets) | `$XDG_RUNTIME_DIR/cave` (else a `0700` folder under the temporary folder) | named pipes, no folder |
+| | Linux | macOS | Windows |
+|---|---|---|---|
+| Configuration | `$XDG_CONFIG_HOME/cave` (else `~/.config/cave`) | `~/Library/Application Support/Cave` | `%AppData%\Cave` |
+| State | `$XDG_STATE_HOME/cave` (else `~/.local/state/cave`) | `~/Library/Application Support/Cave/State` | `%LocalAppData%\Cave` |
+| Runtime (agent sockets) | `$XDG_RUNTIME_DIR/cave` (else the macOS way) | `cave-<uid>`, a `0700` folder under `$TMPDIR` (else `/tmp`) | named pipes, no folder |
 
 `--config-dir` and `--state-dir` (or `CAVE_CONFIG_DIR`, `CAVE_STATE_DIR`) replace them; the flag wins over the variable. Folders are created with mode `0700`.
 
@@ -113,11 +113,11 @@ Every JSON file is an object with `"version": 1`. A file with a higher version i
 
 ### 5.3 Writing
 
-Files are written atomically: a temporary file in the same folder with mode `0600`, `fsync`, rename over the target, `fsync` of the folder (Linux). A failed write leaves the old file.
+Files are written atomically: a temporary file in the same folder with mode `0600`, `fsync`, rename over the target, `fsync` of the folder (Linux and macOS). A failed write leaves the old file.
 
 ### 5.4 One instance
 
-`cave` and `tcave` take an exclusive lock on `<state>/lock` (`flock` on Linux, `LockFileEx` on Windows) and write their PID and program name into it. A second instance on the same folders fails with `AlreadyRunning` and says which program and PID hold it. The lock is released when the process ends, however it ends.
+`cave` and `tcave` take an exclusive lock on `<state>/lock` (`flock` on Linux and macOS, `LockFileEx` on Windows) and write their PID and program name into it. A second instance on the same folders fails with `AlreadyRunning` and says which program and PID hold it. The lock is released when the process ends, however it ends.
 
 ## 6. Settings
 
@@ -298,7 +298,7 @@ Only one of `shell`, `exec`, `subsystem` succeeds per channel. Rules:
 - A process that cannot start (`SessionStartFailed`) is reported to the client on the channel's error stream with exit status 255, and logged. The request itself is granted, as with `sshd`, whose child fails after the request was answered.
 - A signal that killed the process and has no name in the protocol is reported as the exit status a shell gives it: 128 plus its number.
 
-### 9.5 The environment of a session (Linux)
+### 9.5 The environment of a session (Linux and macOS)
 
 The process does **not** inherit Cave's environment. It gets exactly:
 
@@ -319,12 +319,13 @@ The process does **not** inherit Cave's environment. It gets exactly:
 
 What Cave sets is put over what the client set: whatever `session.acceptEnv` allows, a client cannot set `USER`, `LOGNAME`, `HOME`, `SHELL`, `PATH`, `XDG_RUNTIME_DIR`, `TERM`, the `SSH_` variables or `CAVE_PERSON`. An `env` request after the process started is refused.
 
-The shell is `session.shell` when set; else the user's shell in `/etc/passwd`; else `$SHELL` of Cave; else `/bin/sh`. A login shell is started with `-` before its name in `argv[0]`.
+The shell is `session.shell` when set; else the user's shell in `/etc/passwd` (on macOS, where the accounts are in the directory service, the `UserShell` that `dscl . -read /Users/<name> UserShell` gives); else `$SHELL` of Cave; else `/bin/sh`. A login shell is started with `-` before its name in `argv[0]`.
 
 ### 9.6 PTY
 
 - Linux: `/dev/ptmx`, unlocked and named with `ioctl` (`TIOCSPTLCK`, `TIOCGPTN`), opened without cgo. The size comes from `pty-req` and `window-change` (`TIOCSWINSZ`). Columns and rows are at most 4096, else the request is refused. Columns or rows of 0 were not said and are ignored (RFC 4254 §6.2): in `pty-req` the PTY's size stays unknown to the system (0), in `window-change` that dimension stays as it is. OpenSSH sends 0 by 0 when it asks for a PTY without a terminal of its own (`ssh -tt` in a script), so refusing it would break standard clients (§1).
-- The encoded terminal modes of `pty-req` (RFC 4254 §8) are applied to the PTY for the opcodes Linux has; unknown opcodes are skipped, and a malformed list fails the request (`PtyModesInvalid`).
+- macOS: `/dev/ptmx`, granted, unlocked and named with `ioctl` (`TIOCPTYGRANT`, `TIOCPTYUNLK`, `TIOCPTYGNAME`), the slave being `/dev/ttysNNN`; the modes go through `TIOCGETA` and `TIOCSETA`. macOS throws away what the master has not read yet when the last descriptor of the slave closes, so Cave keeps one until the process ended and the master has read everything the slave wrote (`TIOCOUTQ` is 0, at most `DrainTime`): the end of the output reaches the client.
+- The encoded terminal modes of `pty-req` (RFC 4254 §8) are applied to the PTY for the opcodes the system has; unknown opcodes are skipped, and a malformed list fails the request (`PtyModesInvalid`).
 - `pty-req` is granted once per channel, and only before the process starts. Its terminal type becomes `TERM`: it must be printable ASCII without spaces, of at most 128 characters, else the request is refused (it is the client's own text and ends up in the environment); an empty type sets no `TERM`. A refused `pty-req` leaves the channel usable without a PTY. A refusal for the size, the modes or the system's error is logged with its error.
 - `window-change` without a PTY, or with a size out of range, is refused and changes nothing.
 - A PTY that was granted and never used, and every PTY of a session that ended, is closed: Cave leaves no PTY open.
@@ -335,8 +336,8 @@ The shell is `session.shell` when set; else the user's shell in `/etc/passwd`; e
 
 Version 3 of the protocol (draft-ietf-secsh-filexfer-02), as OpenSSH's `sftp-server` speaks it, running inside Cave as the OS user, over the whole file system, starting in the home folder.
 
-- Requests: `INIT`, `OPEN`, `CLOSE`, `READ`, `WRITE`, `LSTAT`, `FSTAT`, `SETSTAT`, `FSETSTAT`, `OPENDIR`, `READDIR`, `REMOVE`, `MKDIR`, `RMDIR`, `REALPATH`, `STAT`, `RENAME`, `READLINK`, `SYMLINK`, and the extensions `posix-rename@openssh.com`, `hardlink@openssh.com`, `fsync@openssh.com`, `statvfs@openssh.com`, `fstatvfs@openssh.com` (Linux) and `limits@openssh.com`. An unknown request gets `SSH_FX_OP_UNSUPPORTED`.
-- `RENAME` fails when the target exists (version 3); `posix-rename` replaces it. On Linux the refusal is one step of the system (`renameat2` with `RENAME_NOREPLACE`); on a file system that does not have it, Cave looks first and then renames, as OpenSSH does.
+- Requests: `INIT`, `OPEN`, `CLOSE`, `READ`, `WRITE`, `LSTAT`, `FSTAT`, `SETSTAT`, `FSETSTAT`, `OPENDIR`, `READDIR`, `REMOVE`, `MKDIR`, `RMDIR`, `REALPATH`, `STAT`, `RENAME`, `READLINK`, `SYMLINK`, and the extensions `posix-rename@openssh.com`, `hardlink@openssh.com`, `fsync@openssh.com`, `statvfs@openssh.com`, `fstatvfs@openssh.com` (Linux and macOS) and `limits@openssh.com`. An unknown request gets `SSH_FX_OP_UNSUPPORTED`.
+- `RENAME` fails when the target exists (version 3); `posix-rename` replaces it. On Linux the refusal is one step of the system (`renameat2` with `RENAME_NOREPLACE`), on macOS too (`renamex_np` with `RENAME_EXCL`, which takes a rename onto the same file for a rename that worked, so Cave refuses that one itself); on a file system that does not have it, Cave looks first and then renames, as OpenSSH does.
 - `READDIR` gives `ls -l` style long names, in OpenSSH's words: the mode, the links, the owner and the group by name (their numbers when the system has no name), the size, the time of the last change (the time of day for a file of the last half year, else the year), the name. A listing begins with `.` and `..`, as OpenSSH's does. An answer has at most 100 names and at most half a packet; the attributes are those of the name itself (of a link, not of what it points to).
 - `SYMLINK` takes what the link points to first and the link second, which is OpenSSH's order and what every client sends; the target is kept as it is written.
 - The handle of a folder is only for `READDIR` and `CLOSE`, the handle of a file for everything else; the other way round gets `SSH_FX_FAILURE`. Folders count toward the 256 handles.
@@ -367,7 +368,7 @@ Version 3 of the protocol (draft-ietf-secsh-filexfer-02), as OpenSSH's `sftp-ser
   - A `forwarded-tcpip` channel says where the connection came from. A connection whose channel the client refuses is closed. At most 256 connections that arrived may be open at once per SSH connection; one more is closed as it arrives. Cancelling a forward leaves the connections that arrived before.
   - With `forwarding.remote` off the request is refused; a forward that is there stays. A port that cannot be listened on (taken, or below 1024 without the right) is refused and logged (`ForwardListenFailed`). A listener that fails later is closed and logged (`ForwardAcceptFailed`).
   - The registry shows each listener as `remote-forward` with the address and port Cave really listens on.
-- **Agent** (`auth-agent-req@openssh.com`): when `forwarding.agent` is on, the session gets a private socket (Linux: `agent.sock` in a new `0700` folder under the runtime folder, the socket `0600`) whose connections are carried to the client over `auth-agent@openssh.com` channels. The socket is removed when the session ends.
+- **Agent** (`auth-agent-req@openssh.com`): when `forwarding.agent` is on, the session gets a private socket (Linux and macOS: `agent.sock` in a new `0700` folder under the runtime folder, the socket `0600`) whose connections are carried to the client over `auth-agent@openssh.com` channels. The socket is removed when the session ends.
   - The request is granted once per channel, before `shell` or `exec`, and sets `SSH_AUTH_SOCK` of the process to the socket. With `forwarding.agent` off it is refused and the session runs without the variable. Cave's own `SSH_AUTH_SOCK` never reaches a session, with or without forwarding (§9.5).
   - Each program that connects to the socket gets a channel of its own to the client's agent; at most 32 at once per session, one more is closed as it arrives. When the client does not open the channel (it has no agent), the program sees the socket close, and the refusal is logged (`AgentOpenFailed`).
   - The socket and its folder are removed when the channel ends, the connection ends or Cave stops. A socket that cannot be made (`AgentRuntimeDirFailed`, `AgentDirFailed`, `AgentListenFailed`, `AgentModeFailed`) refuses the request, and the error is logged.
@@ -467,8 +468,8 @@ Under Wine (§14.4). What Wine cannot show is listed for the user in `docs/MANUA
 
 ### 14.1 Isolation
 No test, proof or check touches the user's Cave folders, `~/.ssh`, SSH agent, `~/.wine`, or the system's `sshd`, or listens anywhere but loopback on a port the OS chose.
-- Go tests: `storagetest.Isolate(t)` points the folders, `HOME`, `XDG_*` and the runtime folder at `t.TempDir()`.
-- Scripts: `scripts/isolated.sh` runs a command with all of those under a temporary folder (or a fixture copied into one) and removes it afterwards.
+- Go tests: `storagetest.Isolate(t)` points the folders, `HOME`, `XDG_*` and the runtime folder at `t.TempDir()` (by its real path: the temporary folder of macOS is under the link `/var`), and `TMPDIR` at a short folder of its own, in which macOS keeps the runtime folder.
+- Scripts: `scripts/isolated.sh` runs a command with all of those (and `TMPDIR`) under a temporary folder (or a fixture copied into one) and removes it afterwards.
 - Sessions started by tests run with the isolated home and a shell the test chooses (`/bin/sh`).
 
 ### 14.2 Levels
@@ -478,6 +479,7 @@ No test, proof or check touches the user's Cave folders, `~/.ssh`, SSH agent, `~
 - **UI**: `gluttertest` widget and golden tests for the desktop app; model tests with text goldens for the TUI.
 - **Display**: `cave_display` tests and proofs in a headless compositor.
 - **Windows**: `GOOS=windows` build and vet always; the tests of the packages with Windows files under Wine.
+- **macOS and Linux**: every test runs on both; `GOOS=linux` and `GOOS=darwin` vet always, so that the system that is not at hand still builds. A test that needs more than one loopback address (127.0.0.2 and up, which only Linux has without setup) skips on macOS.
 
 ### 14.3 Fakes
 `clock` has a fake clock; `internal/app` takes a `Clock`, the folders and a logger, so UIs are tested over a real `App` in a temporary folder with the server on loopback, or over a fake `App` behind the small interface each UI declares.
@@ -493,10 +495,11 @@ No test, proof or check touches the user's Cave folders, `~/.ssh`, SSH agent, `~
 
 - `internal/app/version.go` has `devVersion` (the version being developed, `0.1.0-dev` at first); a release is tagged `vMAJOR.MINOR.PATCH`, and the version printed is the module's version when built from a tag (`runtime/debug.ReadBuildInfo`), else `devVersion`. `--version` prints it.
 - `go build ./cmd/cave ./cmd/tcave` builds both. The Windows desktop program is packaged with Glutter's `glutter-windows build` (icon, version, manifest).
+- A release has an archive for each of Linux, macOS and Windows on x86-64 and arm64 (`scripts/build-release.sh`). The macOS programs are plain programs, signed ad hoc by the Go linker (arm64), not an app bundle.
 
 ## 17. Not in this version
 
-Named so that nobody adds them by accident; each needs a spec change first: password or any other authentication method; several OS users or changing user; per-person permissions (shell, files, forwarding); certificates and `authorized_keys` options; X11 forwarding; blocking addresses after failures; attaching a second UI to a running instance; running as a system service; macOS; translations.
+Named so that nobody adds them by accident; each needs a spec change first: password or any other authentication method; several OS users or changing user; per-person permissions (shell, files, forwarding); certificates and `authorized_keys` options; X11 forwarding; blocking addresses after failures; attaching a second UI to a running instance; running as a system service; an app bundle or notarization for macOS; translations.
 
 ## 18. Milestones
 
@@ -511,3 +514,4 @@ Named so that nobody adds them by accident; each needs a spec change first: pass
 | M6 | Desktop | `cave`, complete, with tray and notifications |
 | M7 | Windows | Everything on Windows, tested under Wine |
 | M8 | Release | Manual, packaging, the security pass |
+| M9 | macOS | Everything on macOS: storage, PTY, sessions, SFTP, agent forwarding, both programs, the scripts and a release archive |

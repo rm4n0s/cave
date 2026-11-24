@@ -12,9 +12,12 @@
 # Inside the command:
 #   CAVE_CONFIG_DIR, CAVE_STATE_DIR                  Cave's folders
 #   HOME, XDG_CONFIG_HOME, XDG_STATE_HOME,
-#   XDG_CACHE_HOME, XDG_DATA_HOME, XDG_RUNTIME_DIR   folders inside the temporary folder
+#   XDG_CACHE_HOME, XDG_DATA_HOME, XDG_RUNTIME_DIR,
+#   TMPDIR                                           folders inside the temporary folder (macOS
+#                                                    keeps Cave's runtime folder in TMPDIR)
 #   CAVE_ISOLATED_ROOT                               the temporary folder
 #   SSH_AUTH_SOCK, SSH_AGENT_PID, SSH_ASKPASS        unset
+#   GOPATH, GOMODCACHE, GOCACHE                      Go's own, as before (when go is installed)
 #
 # Exit status: the command's own; 64 for a usage mistake.
 set -euo pipefail
@@ -50,8 +53,13 @@ if [[ -n "$config" && ! -d "$config" ]]; then
   exit 64
 fi
 
-# The runtime folder holds sockets, whose paths must be short: the root's name is kept short.
-root="$(mktemp -d "${TMPDIR:-/tmp}/cave-iso.XXXXXX")"
+# The runtime folder holds sockets, whose paths must be short: the root's name is kept short,
+# and on macOS, whose temporary folder has a long path, it is in /tmp.
+base="${TMPDIR:-/tmp}"
+if [[ "$(uname -s)" == Darwin ]]; then
+  base=/tmp
+fi
+root="$(mktemp -d "${base%/}/cave-iso.XXXXXX")"
 chmod 700 "$root"
 cleanup() {
   if [[ $keep -eq 1 ]]; then
@@ -63,10 +71,19 @@ cleanup() {
 trap cleanup EXIT
 
 mkdir -m 700 "$root/home" "$root/config" "$root/state" "$root/xdg-config" "$root/xdg-state" \
-  "$root/xdg-cache" "$root/xdg-data" "$root/run"
+  "$root/xdg-cache" "$root/xdg-data" "$root/run" "$root/tmp"
 if [[ -n "$config" ]]; then
   cp -R "$config"/. "$root/config"/
   chmod -R go-rwx "$root/config"
+fi
+
+# Go's own caches stay where they are: under the new HOME, go would fill a module cache of its
+# own (read-only files) for every run.
+if command -v go >/dev/null 2>&1; then
+  GOPATH="$(go env GOPATH)"
+  GOMODCACHE="$(go env GOMODCACHE)"
+  GOCACHE="$(go env GOCACHE)"
+  export GOPATH GOMODCACHE GOCACHE
 fi
 
 export CAVE_ISOLATED_ROOT="$root"
@@ -78,6 +95,7 @@ export XDG_STATE_HOME="$root/xdg-state"
 export XDG_CACHE_HOME="$root/xdg-cache"
 export XDG_DATA_HOME="$root/xdg-data"
 export XDG_RUNTIME_DIR="$root/run"
+export TMPDIR="$root/tmp"
 unset SSH_AUTH_SOCK SSH_AGENT_PID SSH_ASKPASS
 
 # Run the command and keep its exit status; the trap removes the folder.

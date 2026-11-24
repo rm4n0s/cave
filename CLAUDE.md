@@ -3,7 +3,7 @@
 Guidance for Claude Code when working in this repository (Go, hosted on GitHub). The development process and the error handling are those of [Emetos](https://github.com/rm4n0s/emetos)'s `CLAUDE.md` (the user, 2026-11-24: "use the CLAUDE.md from github.com/rm4n0s/emetos for the development process and error handling"), adapted to this project.
 
 ## Project
-Cave does the job of `sshd`, as an application that an ordinary user starts and watches: a desktop application (`cave`) or a terminal UI (`tcave`). The user adds **people**, gives each of them public keys, and sees who tried to connect and how many times. It needs no root: every session runs as the OS user who started Cave. The SSH server is `golang.org/x/crypto/ssh`; the desktop UI is built on [Glutter](https://github.com/rm4n0s/glutter), a cgo-free GUI toolkit for Go with Flutter's framework API; the TUI is built on Bubble Tea and Lip Gloss. Cave targets Linux and Windows 10 1809+ (tested under Wine); macOS comes later (the user, 2026-11-24). The system's parts have `_linux.go` and `_windows.go` files with the same function names, and tests that cannot run on both say why in `t.Skip`.
+Cave does the job of `sshd`, as an application that an ordinary user starts and watches: a desktop application (`cave`) or a terminal UI (`tcave`). The user adds **people**, gives each of them public keys, and sees who tried to connect and how many times. It needs no root: every session runs as the OS user who started Cave. The SSH server is `golang.org/x/crypto/ssh`; the desktop UI is built on [Glutter](https://github.com/rm4n0s/glutter), a cgo-free GUI toolkit for Go with Flutter's framework API; the TUI is built on Bubble Tea and Lip Gloss. Cave targets Linux, macOS 14+ (the user, 2026-11-25: "make it work for macos") and Windows 10 1809+ (tested under Wine). The system's parts have `_linux.go`, `_darwin.go` and `_windows.go` files with the same function names; what Linux and macOS share is in `_unix.go` files (`//go:build linux || darwin`). Tests that cannot run everywhere say why in `t.Skip`.
 
 **`docs/SPEC.md` is the source of truth.** Read the sections that cover a task before starting it. If the code and the spec disagree, or a task needs a decision the spec doesn't make, ask instead of guessing. When a decision changes, update the spec on the same branch.
 
@@ -21,10 +21,10 @@ Cave does the job of `sshd`, as an application that an ordinary user starts and 
 - Update golden files: `go test ./... -run Golden -update-goldens`, then review every changed file (PNG for the desktop UI, text for the TUI)
 - All the checks of "Definition of done" in one command: `scripts/checks.sh`
 - Heavy commands (full test runs, lint, the Wine run, display tests): through `scripts/heavy.sh` (`--alone` for display tests and the Wine run), see "Memory (OOM)"; `scripts/checks.sh` does it itself
-- Vet: `go vet ./...` and `GOOS=windows go vet ./...`
+- Vet: `go vet ./...`, `GOOS=linux go vet ./...`, `GOOS=darwin go vet ./...` and `GOOS=windows go vet ./...`
 - Lint: `golangci-lint run`
 - Format: `gofmt -w cmd internal`
-- Run the desktop app: `go run -tags debug_mode ./cmd/cave` (it uses your real configuration)
+- Run the desktop app: `go run -tags debug_mode ./cmd/cave` (it uses your real configuration). On macOS, a picture of its real window: `go run github.com/rm4n0s/glutter/cmd/glutter-macos shot -o <out.png> ./cmd/cave` (under `scripts/isolated.sh`)
 - Run the TUI: `go run ./cmd/tcave`
 - Run either isolated from your configuration: `scripts/isolated.sh [--config <fixture dir>] -- go run ./cmd/tcave <args>`
 - Make a proof: `scripts/proof.sh <out.png> ...` for the desktop app and `scripts/tui-proof.sh <out.txt> ...` for the TUI (docs/IMPLEMENTATION.md "Proof methods")
@@ -34,6 +34,7 @@ Cave does the job of `sshd`, as an application that an ordinary user starts and 
 Before reporting a task as finished, run `gofmt` (on `cmd` and `internal`), `go vet ./...`, `golangci-lint run` and `go test -race -tags debug_mode ./...` (a debug build), and fix anything they report. Say so explicitly if any step was skipped or failed. Also:
 - `CGO_ENABLED=0 go build ./...` and `CGO_ENABLED=0 go test ./...` pass (proves Cave stays cgo-free, and runs every test as a release build)
 - `GOOS=windows CGO_ENABLED=0 go build ./...` and `GOOS=windows go vet ./...` pass, and `scripts/test-windows.sh` passes under Wine
+- `GOOS=linux go vet ./...` and `GOOS=darwin go vet ./...` pass (the system that is not the one at hand)
 - `scripts/error-tags.sh --untested` prints nothing (every error Tag has a test that asserts its route; `docs/ERROR-TAGS-UNTESTED.md` is the only exception list)
 - Every new exported identifier has a doc comment
 - Every changed golden file has been looked at, not just regenerated

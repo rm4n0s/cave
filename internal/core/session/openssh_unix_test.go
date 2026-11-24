@@ -1,3 +1,5 @@
+//go:build linux || darwin
+
 package session
 
 import (
@@ -5,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -102,7 +105,7 @@ func TestOpenSSHExec(t *testing.T) {
 		{"an exit status", "echo before; exit 3", "", sshtest.Result{Stdout: "before\n", ExitCode: 3}},
 		{"a command that does not exist", "/nonexistent/command 2>/dev/null", "", sshtest.Result{ExitCode: 127}},
 		{"standard input", "cat", "one\ntwo\n", sshtest.Result{Stdout: "one\ntwo\n"}},
-		{"the end of standard input", "wc -l", "a\nb\nc\n", sshtest.Result{Stdout: "3\n"}},
+		{"the end of standard input", "wc -l | tr -d ' '", "a\nb\nc\n", sshtest.Result{Stdout: "3\n"}},
 		{"input that is not read", "echo unread", strings.Repeat("x", 100000), sshtest.Result{Stdout: "unread\n"}},
 		{"quoting", `printf '%s|' "a b" 'c  d'`, "", sshtest.Result{Stdout: "a b|c  d|"}},
 		{"who and where", `echo "$USER $HOME $CAVE_PERSON"; pwd`, "", sshtest.Result{Stdout: "tester " + f.Home + " alice\n" + f.Home + "\n"}},
@@ -147,8 +150,8 @@ func TestOpenSSHShellOnATerminal(t *testing.T) {
 	}
 
 	// A command on a terminal: the terminal type is ssh's, and the line ends are a terminal's.
-	got = f.ssh.SSH("", "alice", f.key, []string{"-tt"}, `test -t 1 && echo "tty=${SSH_TTY%/*}"; exit 4`)
-	if got.Stdout != "tty=/dev/pts\r\n" || got.ExitCode != 4 {
+	got = f.ssh.SSH("", "alice", f.key, []string{"-tt"}, `test -t 1 && echo "tty=$SSH_TTY"; exit 4`)
+	if !regexp.MustCompile(`^tty=`+ttyPattern+`\r\n$`).MatchString(got.Stdout) || got.ExitCode != 4 {
 		t.Errorf("%+v", got)
 	}
 }
@@ -350,7 +353,7 @@ func TestOpenSSHSFTPBatch(t *testing.T) {
 			listing[fields[len(fields)-1]] = fields[0] + " " + fields[1]
 		}
 	}
-	want := map[string]string{"renamed.txt": "-rw-r----- 2", "twin": "-rw-r----- 2", "link": "lrwxrwxrwx 1"}
+	want := map[string]string{"renamed.txt": "-rw-r----- 2", "twin": "-rw-r----- 2", "link": linkMode + " 1"}
 	for name, mode := range want {
 		if listing[name] != mode {
 			t.Errorf("the listing shows %s as %q, want %q:\n%s", name, listing[name], mode, got.Stdout)

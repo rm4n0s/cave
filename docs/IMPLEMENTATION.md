@@ -1497,3 +1497,66 @@ It must show `alice` with `exec`. Afterwards `pgrep -a ssh` shows nothing of you
 **Tests**: those the table lacked, and the flood test.
 
 **Finish**: rules 10–15, then the publish of M8, then the final report: what is built, every item still in `docs/MANUAL-CHECKS.md`, every entry of `docs/GLUTTER-ISSUES.md`.
+
+## M9: macOS
+
+The user, 2026-11-25: "make it work for macos". Everything of Cave on macOS 14 or later, without cgo, as on Linux. Published as `v0.10.0`.
+
+**Read this before any step of M9.**
+
+- The rule of the platforms (CLAUDE.md "Project"): what Linux and macOS share moves from `_linux.go` to a `_unix.go` file with `//go:build linux || darwin`; what differs stays in `_linux.go` and gets a `_darwin.go` twin with **the same function names and signatures**. The same for tests: a test that runs on both is in a `_unix_test.go` file, and the facts that differ (a path, a message of the system) are constants of small `_linux_test.go` and `_darwin_test.go` files.
+- macOS functions come from `golang.org/x/sys/unix` (in the module cache); look every one up there. When a call is missing (`TIOCPTYGNAME` needs a buffer), use `syscall.Syscall` with the constant from `x/sys`. No cgo, no new dependency.
+- Every test runs on macOS **and** stays green on Linux: `GOOS=linux go vet ./...` after every change, and the Linux tests where a Linux computer is at hand.
+- The temporary folder of macOS is long (`/var/folders/…/T/`), ends with a slash and is under a link (`/var` is `/private/var`); a socket's path has at most 104 bytes. Tests that make sockets use short folders under `/tmp`.
+
+### Step 9.1: The core and the programs on macOS
+
+**Goal**: `cave` and `tcave` run on macOS, and every test passes there.
+
+**Files**: `internal/core/storage` (`storage_unix.go`, `storage_darwin.go`), `internal/core/storage/storagetest`, `internal/core/pty` (`pty_unix.go`, `pty_darwin.go`), `internal/core/session` (`proc_unix.go`, `dirshell_darwin.go`, the `_unix_test.go` files and `platform_*_test.go`), `internal/core/sftp` (`fs_unix.go`, `fs_darwin.go`), `internal/core/agentfwd`, `internal/core/sshtest`, `internal/app` (the usage), `cmd/*/signals_unix.go`, `scripts/isolated.sh`, `scripts/transcript.sh`, docs/SPEC.md, docs/SECURITY.md (the renamed files).
+
+**Tasks**
+
+1. Storage: the folders of SPEC §5.1 for macOS; the runtime folder `cave-<uid>` under `$TMPDIR`; `flock` and `fsync` of the folder as on Linux.
+2. PTY: `/dev/ptmx` with `TIOCPTYGRANT`, `TIOCPTYUNLK`, `TIOCPTYGNAME`; the modes through `TIOCGETA`/`TIOCSETA` (64-bit flags, `_POSIX_VDISABLE` is 0xff). macOS throws away the output the master has not read when the last slave descriptor closes: keep one until the process ended and `TIOCOUTQ` is 0 (`Pty.Release`), so the end of the output reaches the client.
+3. Sessions: the shell of the account from `dscl` when `/etc/passwd` has no line for it (SPEC §9.5).
+4. SFTP: `renamex_np` with `RENAME_EXCL` (refusing a rename onto the same file itself), the times of `Stat_t`, `statvfs` from `Statfs_t`.
+5. The usage names the macOS folders (a golden file for each program).
+6. Isolation (SPEC §14.1): `storagetest.Isolate` and `scripts/isolated.sh` also point `TMPDIR` at a folder of their own, and name folders by their real path. `scripts/isolated.sh` keeps Go's caches.
+
+**Tests**: every test of the module on macOS; the PTY's release (`TestReleaseWaitsForTheOutputToBeRead`); the shell from `dscl` (`TestDsclShell`, `TestDirectoryShellOfThisUser`); the macOS folders (`TestResolveOnMacOS`); `TestVFSOf` for macOS.
+
+**Proof** (T, M): `scripts/transcript.sh docs/implemented-proof-images/9.1-macos-openssh.txt -- go test -v -count=1 -run OpenSSH ./internal/core/...` on a Mac: the real `ssh`, `sftp` and `scp` against Cave. `9.1-macos-overview.png`: the real window of `cave` on a Mac, `scripts/isolated.sh --config scripts/testdata/two-people -- go run github.com/rm4n0s/glutter/cmd/glutter-macos shot -o <out.png> ./cmd/cave`.
+
+**Finish**: rules 10–15.
+
+### Step 9.2: The scripts and the release on macOS
+
+**Goal**: the scripts work with the bash and the tools of macOS, and a release has archives for macOS.
+
+**Files**: `scripts/heavy.sh`, `scripts/checks.sh`, `scripts/build-release.sh`, `internal/archtest/release_test.go`.
+
+**Tasks**
+
+1. `scripts/heavy.sh`: macOS has bash 3.2 (no `{fd}>` redirections) and no `flock(1)`: fixed descriptors, and the locks through Perl's `flock` when `flock(1)` is missing.
+2. `scripts/checks.sh` vets for Linux and macOS as well as Windows.
+3. `scripts/build-release.sh`: `cave-<v>-macos-amd64.tar.gz` and `cave-<v>-macos-arm64.tar.gz` with `cave`, `tcave`, `README.md` and `LICENSE`; `tar` of GNU or BSD.
+
+**Tests**: `TestBuildReleaseMakesEveryArchive` checks the macOS archives (Mach-O programs for the right processor, built without cgo).
+
+**Finish**: rules 10–15. No proof.
+
+### Step 9.3: The manual for macOS
+
+**Goal**: the README and the guide say how Cave runs on a Mac.
+
+**Files**: `README.md`, `docs/GUIDE.md`, `CLAUDE.md`, `docs/MANUAL-CHECKS.md`.
+
+**Tasks**
+
+1. README: macOS in the systems and in the release files.
+2. The guide: the macOS folders, and a section "macOS": the shell, the terminal, a downloaded program (`xattr -d com.apple.quarantine`), the folders macOS protects, the firewall, Remote Login.
+3. Manual checks for what only a person at a Mac can see: the tray, the notifications, an interactive terminal session.
+4. **Last step of M9**: a second commit sets `devVersion` to `0.11.0-dev`; then merge, tag `step-9.3`, publish as `v0.10.0` (rule 14).
+
+**Finish**: rules 10–15. No proof.

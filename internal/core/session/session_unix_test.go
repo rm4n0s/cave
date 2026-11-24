@@ -1,3 +1,5 @@
+//go:build linux || darwin
+
 package session
 
 import (
@@ -135,16 +137,16 @@ func TestExec(t *testing.T) {
 		{"output and success", "echo hello", "", result{stdout: "hello\n"}},
 		{"both streams", "echo out; echo err >&2", "", result{stdout: "out\n", stderr: "err\n"}},
 		{"an exit status", "echo before; exit 3", "", result{stdout: "before\n", status: 3}},
-		{"a command that does not exist", "/nonexistent/command", "", result{stderr: "/bin/sh: line 1: /nonexistent/command: No such file or directory\n", status: 127}},
+		{"a command that does not exist", "/nonexistent/command", "", result{stderr: notFoundPrefix + "/nonexistent/command: No such file or directory\n", status: 127}},
 		{"input", "cat", "one\ntwo\n", result{stdout: "one\ntwo\n"}},
-		{"the end of the input", "wc -l", "a\nb\nc\n", result{stdout: "3\n"}},
+		{"the end of the input", "wc -l | tr -d ' '", "a\nb\nc\n", result{stdout: "3\n"}},
 		{"input that is not read", "echo done", strings.Repeat("ignored\n", 10000), result{stdout: "done\n"}},
 		{"no output at all", "true", "", result{}},
 		{"quotes and special characters reach the shell as written", `printf '%s|' "a b" 'c;d' $((1+2))`, "", result{stdout: "a b|c;d|3|"}},
 		// The client's library gives 128 plus the signal's number as the status of an exit-signal.
 		{"killed by a signal", "kill -TERM $$", "", result{signal: "TERM", status: 143}},
 		{"killed by another signal", "kill -KILL $$", "", result{signal: "KILL", status: 137}},
-		{"killed by a signal the protocol has no name for", "kill -STKFLT $$", "", result{status: 128 + 16}},
+		{"killed by a signal the protocol has no name for", "kill -" + unnamedSignal + " $$", "", result{status: 128 + unnamedSignalNumber}},
 		{"the working folder is the home", "pwd", "", result{stdout: "HOME\n"}},
 		{"the shell is not a login shell", `case "$0" in -*) echo login;; *) echo "$0";; esac`, "", result{stdout: "/bin/sh\n"}},
 	}

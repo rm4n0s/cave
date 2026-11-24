@@ -341,6 +341,11 @@ func (s *session) start(command string, login bool) bool {
 	go func() {
 		status, signal := wait(proc)
 		close(proc.exited)
+		if s.pty != nil {
+			// Cave lets go of the terminal (macOS kept a handle until now, so that the output
+			// still in it is read before the master sees the end).
+			s.pty.Release(DrainTime)
+		}
 		// The process ended. Its descendants may still hold the pipes: what they write within
 		// DrainTime is still sent, then the pipes are closed under them.
 		drained := make(chan struct{})

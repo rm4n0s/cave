@@ -1,3 +1,5 @@
+//go:build linux || darwin
+
 package apptest
 
 // shell is the shell that the sessions of a test run.

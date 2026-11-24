@@ -48,6 +48,10 @@ func envOf(output string) map[string]string {
 	return vars
 }
 
+// statMode is the stat command that prints the mode of a file in octal, then its name: GNU
+// stat on Linux, BSD stat on macOS.
+var statMode = map[bool]string{true: `stat -f '%Lp %N'`, false: `stat -c '%a %n'`}[runtime.GOOS == "darwin"]
+
 func TestIsolatedScript(t *testing.T) {
 	dirty := []string{
 		"SSH_AUTH_SOCK=/home/someone/agent.sock", "SSH_AGENT_PID=4242", "SSH_ASKPASS=/usr/bin/ask",
@@ -68,7 +72,7 @@ func TestIsolatedScript(t *testing.T) {
 		for name, sub := range map[string]string{
 			"CAVE_CONFIG_DIR": "config", "CAVE_STATE_DIR": "state", "HOME": "home",
 			"XDG_CONFIG_HOME": "xdg-config", "XDG_STATE_HOME": "xdg-state", "XDG_CACHE_HOME": "xdg-cache",
-			"XDG_DATA_HOME": "xdg-data", "XDG_RUNTIME_DIR": "run",
+			"XDG_DATA_HOME": "xdg-data", "XDG_RUNTIME_DIR": "run", "TMPDIR": "tmp",
 		} {
 			if want := filepath.Join(root, sub); vars[name] != want {
 				t.Errorf("%s = %q, want %q", name, vars[name], want)
@@ -86,12 +90,12 @@ func TestIsolatedScript(t *testing.T) {
 
 	t.Run("the folders exist and are private while the command runs", func(t *testing.T) {
 		out, _, status := runScript(t, dirty, "isolated.sh", "--", "sh", "-c",
-			`stat -c '%a %n' "$CAVE_CONFIG_DIR" "$CAVE_STATE_DIR" "$HOME" "$XDG_RUNTIME_DIR" "$CAVE_ISOLATED_ROOT"`)
+			statMode+` "$CAVE_CONFIG_DIR" "$CAVE_STATE_DIR" "$HOME" "$XDG_RUNTIME_DIR" "$TMPDIR" "$CAVE_ISOLATED_ROOT"`)
 		if status != 0 {
 			t.Fatalf("status %d", status)
 		}
 		lines := strings.Split(strings.TrimSpace(out), "\n")
-		if len(lines) != 5 {
+		if len(lines) != 6 {
 			t.Fatalf("output:\n%s", out)
 		}
 		for _, line := range lines {
@@ -103,14 +107,15 @@ func TestIsolatedScript(t *testing.T) {
 
 	t.Run("a fixture becomes the configuration", func(t *testing.T) {
 		out, _, status := runScript(t, dirty, "isolated.sh", "--config", fixture("isolatedconfig"), "--",
-			"sh", "-c", `cat "$CAVE_CONFIG_DIR/settings.json"; stat -c '%a' "$CAVE_CONFIG_DIR/settings.json"`)
+			"sh", "-c", `cat "$CAVE_CONFIG_DIR/settings.json"; `+statMode+` "$CAVE_CONFIG_DIR/settings.json"`)
 		if status != 0 {
 			t.Fatalf("status %d", status)
 		}
 		if !strings.Contains(out, `"server.port":2022`) {
 			t.Errorf("the fixture was not copied:\n%s", out)
 		}
-		if !strings.HasSuffix(strings.TrimSpace(out), "00") {
+		lines := strings.Split(strings.TrimSpace(out), "\n")
+		if mode, _, _ := strings.Cut(lines[len(lines)-1], " "); !strings.HasSuffix(mode, "00") {
 			t.Errorf("the copied file is open to others:\n%s", out)
 		}
 		// The fixture itself is untouched.
@@ -166,7 +171,8 @@ func TestIsolatedScript(t *testing.T) {
 
 func TestTranscriptScript(t *testing.T) {
 	out := filepath.Join(t.TempDir(), "proof.txt")
-	tmp := os.TempDir()
+	// As a test prints it: t.TempDir() is cleaned (the TMPDIR of macOS ends with a slash).
+	tmp := filepath.Clean(os.TempDir())
 	script := `echo "=== RUN   TestX"
 echo "--- PASS: TestX (0.42s)"
 echo "listening on 127.0.0.1:43211 and [::1]:5022"

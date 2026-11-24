@@ -29,12 +29,17 @@ if [[ $status -ne 0 ]]; then
 fi
 
 tmp="${TMPDIR:-/tmp}"
+tmp="${tmp%/}"
+# The same folder by its real path: on macOS the temporary folder is under /var, a link to
+# /private/var, and a test may print either.
+realtmp="$(cd "$tmp" && pwd -P)"
 {
   printf '$'
   printf ' %q' "$@"
   printf '\n'
   sed -E \
-    -e "s#${tmp%/}/[A-Za-z0-9._-]+(/[0-9]{3})?#<tmp>#g" \
+    -e "s#${realtmp}/[A-Za-z0-9._-]+(/[0-9]{3})?#<tmp>#g" \
+    -e "s#${tmp}/[A-Za-z0-9._-]+(/[0-9]{3})?#<tmp>#g" \
     -e 's#[A-Za-z]:\\(users|windows)\\[^ "]*\\(Temp|temp)\\[A-Za-z0-9._-]+(\\[0-9]{3})?#<tmp>#g' \
     -e 's#(127\.0\.0\.1|\[::1\]|localhost):[0-9]+#\1:<port>#g' \
     -e 's# \([0-9]+\.[0-9]+s\)##' \

@@ -38,7 +38,7 @@ func TestIsolate(t *testing.T) {
 		// No variable that names a folder of the user still points into the real home.
 		for _, name := range []string{
 			"HOME", "USERPROFILE", "AppData", "LocalAppData", "XDG_CONFIG_HOME", "XDG_STATE_HOME",
-			"XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_RUNTIME_DIR", "CAVE_CONFIG_DIR", "CAVE_STATE_DIR",
+			"XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_RUNTIME_DIR", "TMPDIR", "CAVE_CONFIG_DIR", "CAVE_STATE_DIR",
 		} {
 			value, ok := os.LookupEnv(name)
 			if !ok || value == "" {

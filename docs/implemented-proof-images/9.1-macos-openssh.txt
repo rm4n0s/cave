@@ -1,0 +1,218 @@
+$ bash -c echo\ \"\\\$\ uname\ -sm\;\ sw_vers\ -productVersion\;\ go\ version\"\;\ uname\ -sm\;\ sw_vers\ -productVersion\;\ go\ version\;\ echo\ \"\\\$\ go\ test\ -v\ -count=1\ -run\ OpenSSH\ ./internal/core/...\"\;\ go\ test\ -v\ -count=1\ -run\ OpenSSH\ ./internal/core/...
+$ uname -sm; sw_vers -productVersion; go version
+Darwin arm64
+27.2
+go version go1.27.3 darwin/arm64
+$ go test -v -count=1 -run OpenSSH ./internal/core/...
+testing: warning: no tests to run
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/agentfwd	0.113s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/attempts	0.098s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/clock	0.088s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/errtest	0.081s [no tests to run]
+=== RUN   TestOpenSSHLocalForward
+    openssh_test.go:67: $ ssh -N -o ExitOnForwardFailure=yes -L /tmp/cave-rt-1134460937/cave-sock-3537147199/local.sock:127.0.0.1:<port> alice@127.0.0.1 &
+    openssh_test.go:83: a message went through the forward to the echo server on 127.0.0.1 and came back; the registry showed the forward
+--- PASS: TestOpenSSHLocalForward
+=== RUN   TestOpenSSHDynamicForward
+    openssh_test.go:94: $ ssh -N -o ExitOnForwardFailure=yes -D /tmp/cave-rt-1020455562/cave-sock-2278624350/socks.sock alice@127.0.0.1 &
+    openssh_test.go:123: a SOCKS5 request for the echo server on 127.0.0.1 was answered, and a message came back through it
+--- PASS: TestOpenSSHDynamicForward
+=== RUN   TestOpenSSHLocalForwardIsRefusedWhenTurnedOff
+    openssh_test.go:137: $ ssh -N -L /tmp/cave-rt-3811032143/cave-sock-2252101960/local.sock:127.0.0.1:<port> alice@127.0.0.1 &
+    openssh_test.go:160: with forwarding.local off nothing came through, the echo server got no connection, and Cave logged the refusal
+--- PASS: TestOpenSSHLocalForwardIsRefusedWhenTurnedOff
+=== RUN   TestOpenSSHRemoteForward
+    openssh_test.go:173: $ ssh -N -o ExitOnForwardFailure=yes -R 0:127.0.0.1:<port> alice@127.0.0.1 &
+    openssh_test.go:197: Cave listened on a port of 127.0.0.1 for ssh; a message sent there reached the echo server behind ssh and came back
+--- PASS: TestOpenSSHRemoteForward
+=== RUN   TestOpenSSHRemoteForwardIsRefusedWhenTurnedOff
+    openssh_test.go:213: $ ssh -N -o ExitOnForwardFailure=yes -R 0:127.0.0.1:<port> alice@127.0.0.1  (exit status 255)
+    openssh_test.go:221: with forwarding.remote off, ssh reports: Error: remote port forwarding failed for listen port 0
+--- PASS: TestOpenSSHRemoteForwardIsRefusedWhenTurnedOff
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/forward
+=== RUN   TestOpenSSHAgreesWithTheKey
+--- PASS: TestOpenSSHAgreesWithTheKey
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/hostkey
+testing: warning: no tests to run
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/ids	0.076s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/logging	0.081s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/netinfo	0.074s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/people	0.087s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/pty	0.076s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/sanitize	0.076s [no tests to run]
+=== RUN   TestOpenSSHIsRefusedAndAccepted
+    server_test.go:912: $ ssh alice@127.0.0.1 true  (exit status 255)
+    server_test.go:916: $ ssh mallory@127.0.0.1 true  (exit status 255)
+    server_test.go:921: $ ssh alice@127.0.0.1 true  (exit status 255)
+--- PASS: TestOpenSSHIsRefusedAndAccepted
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/server
+testing: warning: no tests to run
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/server/servertest	0.088s [no tests to run]
+=== RUN   TestOpenSSHAgentForwarding
+    agent_session_unix_test.go:332: $ ssh -A alice@127.0.0.1 ssh-add -l; echo "status=$?"; test -S "$SSH_AUTH_SOCK" && echo "a socket"  (exit status 0)
+    agent_session_unix_test.go:336: in the session, ssh-add -l listed the key that only the client's agent has
+    agent_session_unix_test.go:339: $ ssh alice@127.0.0.1 echo "sock=$SSH_AUTH_SOCK"  (exit status 0)
+    agent_session_unix_test.go:345: $ ssh -A alice@127.0.0.1 echo "sock=$SSH_AUTH_SOCK"  (exit status 0)
+    agent_session_unix_test.go:349: without -A, and with forwarding.agent off, the session has no SSH_AUTH_SOCK
+--- PASS: TestOpenSSHAgentForwarding
+=== RUN   TestOpenSSHExec
+=== RUN   TestOpenSSHExec/output_and_success
+=== NAME  TestOpenSSHExec
+    openssh_unix_test.go:116: $ ssh alice@127.0.0.1 echo hello  (exit status 0)
+=== RUN   TestOpenSSHExec/both_streams
+=== NAME  TestOpenSSHExec
+    openssh_unix_test.go:116: $ ssh alice@127.0.0.1 echo out; echo err >&2  (exit status 0)
+=== RUN   TestOpenSSHExec/an_exit_status
+=== NAME  TestOpenSSHExec
+    openssh_unix_test.go:116: $ ssh alice@127.0.0.1 echo before; exit 3  (exit status 3)
+=== RUN   TestOpenSSHExec/a_command_that_does_not_exist
+=== NAME  TestOpenSSHExec
+    openssh_unix_test.go:116: $ ssh alice@127.0.0.1 /nonexistent/command 2>/dev/null  (exit status 127)
+=== RUN   TestOpenSSHExec/standard_input
+=== NAME  TestOpenSSHExec
+    openssh_unix_test.go:116: $ ssh alice@127.0.0.1 cat  (exit status 0)
+=== RUN   TestOpenSSHExec/the_end_of_standard_input
+=== NAME  TestOpenSSHExec
+    openssh_unix_test.go:116: $ ssh alice@127.0.0.1 wc -l | tr -d ' '  (exit status 0)
+=== RUN   TestOpenSSHExec/input_that_is_not_read
+=== NAME  TestOpenSSHExec
+    openssh_unix_test.go:116: $ ssh alice@127.0.0.1 echo unread  (exit status 0)
+=== RUN   TestOpenSSHExec/quoting
+=== NAME  TestOpenSSHExec
+    openssh_unix_test.go:116: $ ssh alice@127.0.0.1 printf '%s|' "a b" 'c  d'  (exit status 0)
+=== RUN   TestOpenSSHExec/who_and_where
+=== NAME  TestOpenSSHExec
+    openssh_unix_test.go:116: $ ssh alice@127.0.0.1 echo "$USER $HOME $CAVE_PERSON"; pwd  (exit status 0)
+=== RUN   TestOpenSSHExec/no_terminal
+=== NAME  TestOpenSSHExec
+    openssh_unix_test.go:116: $ ssh alice@127.0.0.1 tty  (exit status 1)
+--- PASS: TestOpenSSHExec
+    --- PASS: TestOpenSSHExec/output_and_success
+    --- PASS: TestOpenSSHExec/both_streams
+    --- PASS: TestOpenSSHExec/an_exit_status
+    --- PASS: TestOpenSSHExec/a_command_that_does_not_exist
+    --- PASS: TestOpenSSHExec/standard_input
+    --- PASS: TestOpenSSHExec/the_end_of_standard_input
+    --- PASS: TestOpenSSHExec/input_that_is_not_read
+    --- PASS: TestOpenSSHExec/quoting
+    --- PASS: TestOpenSSHExec/who_and_where
+    --- PASS: TestOpenSSHExec/no_terminal
+=== RUN   TestOpenSSHCarriesBinaryDataBothWays
+    openssh_unix_test.go:127: $ ssh alice@127.0.0.1 cat  (exit status 0)
+    openssh_unix_test.go:131: 2097152 bytes of every value went through cat and came back the same
+--- PASS: TestOpenSSHCarriesBinaryDataBothWays
+=== RUN   TestOpenSSHShellOnATerminal
+    openssh_unix_test.go:138: $ ssh -tt alice@127.0.0.1  (exit status 7)
+    openssh_unix_test.go:153: $ ssh -tt alice@127.0.0.1 test -t 1 && echo "tty=$SSH_TTY"; exit 4  (exit status 4)
+--- PASS: TestOpenSSHShellOnATerminal
+=== RUN   TestOpenSSHMultiplexing
+    openssh_unix_test.go:186: the registry has 1 connection of alice with 2 sessions
+    openssh_unix_test.go:167: $ ssh alice@127.0.0.1 while [ ! -e gate ]; do sleep 0.05; done; echo through  (exit status 0)
+    openssh_unix_test.go:167: $ ssh alice@127.0.0.1 while [ ! -e gate ]; do sleep 0.05; done; echo through  (exit status 0)
+    openssh_unix_test.go:194: $ ssh alice@127.0.0.1 echo third; exit 9  (exit status 9)
+    openssh_unix_test.go:207: the attempts list has 1 entry: alice, 1 time
+--- PASS: TestOpenSSHMultiplexing
+=== RUN   TestOpenSSHScp
+    openssh_unix_test.go:229: $ scp -O <tmp>/up.bin alice@127.0.0.1:stored.bin  (exit status 0)
+    openssh_unix_test.go:229: $ scp -O alice@127.0.0.1:stored.bin <tmp>/down.bin  (exit status 0)
+    openssh_unix_test.go:229: $ scp -O -r <tmp>/tree alice@127.0.0.1:tree-copy  (exit status 0)
+    openssh_unix_test.go:229: $ scp -O -r alice@127.0.0.1:tree-copy <tmp>/tree-back  (exit status 0)
+    openssh_unix_test.go:240: $ scp -O alice@127.0.0.1:missing.bin <tmp>/missing.bin  (exit status 1)
+--- PASS: TestOpenSSHScp
+=== RUN   TestOpenSSHRsync
+    openssh_unix_test.go:261: $ rsync -a -e ssh <tmp>/src/ alice@127.0.0.1:synced/  (exit status 0)
+    openssh_unix_test.go:266: $ rsync -a -e ssh alice@127.0.0.1:synced/ <tmp>/back/  (exit status 0)
+--- PASS: TestOpenSSHRsync
+=== RUN   TestOpenSSHGit
+    openssh_unix_test.go:298: $ git init --quiet --bare <tmp>/home/project.git  (exit status 0)
+    openssh_unix_test.go:299: $ git init --quiet  (exit status 0)
+    openssh_unix_test.go:300: $ git add README  (exit status 0)
+    openssh_unix_test.go:301: $ git commit --quiet -m first  (exit status 0)
+    openssh_unix_test.go:302: $ git push --quiet <tmp>/home/project.git main  (exit status 0)
+    openssh_unix_test.go:307: $ git clone --quiet ssh://alice@127.0.0.1:<port><tmp>/home/project.git <tmp>/clone  (exit status 0)
+    openssh_unix_test.go:311: $ git commit --quiet -a -m second  (exit status 0)
+    openssh_unix_test.go:312: $ git push --quiet origin main  (exit status 0)
+    openssh_unix_test.go:313: $ git --git-dir <tmp>/home/project.git log --format=%s main  (exit status 0)
+--- PASS: TestOpenSSHGit
+=== RUN   TestOpenSSHSFTPBatch
+    openssh_unix_test.go:341: $ sftp -b - alice@127.0.0.1  (exit status 0)
+    openssh_unix_test.go:341:     sftp> pwd
+    openssh_unix_test.go:341:     sftp> put <tmp>/up.bin stored.bin
+    openssh_unix_test.go:341:     sftp> get stored.bin <tmp>/down.bin
+    openssh_unix_test.go:341:     sftp> mkdir docs
+    openssh_unix_test.go:341:     sftp> put <tmp>/note.txt docs/note.txt
+    openssh_unix_test.go:341:     sftp> rename docs/note.txt docs/renamed.txt
+    openssh_unix_test.go:341:     sftp> ln -s renamed.txt docs/link
+    openssh_unix_test.go:341:     sftp> ln docs/renamed.txt docs/twin
+    openssh_unix_test.go:341:     sftp> chmod 640 docs/renamed.txt
+    openssh_unix_test.go:341:     sftp> ls -la docs
+    openssh_unix_test.go:341:     sftp> df .
+    openssh_unix_test.go:341:     sftp> rm docs/twin
+    openssh_unix_test.go:341:     sftp> mkdir gone
+    openssh_unix_test.go:341:     sftp> rmdir gone
+    openssh_unix_test.go:387: 5243201 bytes went up and came back the same; the listing, the link, the mode and the removals are as asked
+    openssh_unix_test.go:390: $ sftp -b - alice@127.0.0.1  (exit status 1)
+    openssh_unix_test.go:390:     sftp> get missing.bin <tmp>/missing.bin
+    openssh_unix_test.go:397: $ sftp -b - alice@127.0.0.1  (exit status 0)
+    openssh_unix_test.go:397:     sftp> rename one two
+--- PASS: TestOpenSSHSFTPBatch
+=== RUN   TestOpenSSHSFTPIsRefusedWhenTurnedOff
+    openssh_unix_test.go:406: $ sftp -b - alice@127.0.0.1  (exit status 255)
+    openssh_unix_test.go:406:     sftp> pwd
+    openssh_unix_test.go:411: $ ssh alice@127.0.0.1 echo in  (exit status 0)
+--- PASS: TestOpenSSHSFTPIsRefusedWhenTurnedOff
+=== RUN   TestOpenSSHSFTPScp
+    openssh_unix_test.go:441: $ scp -p <tmp>/up.bin alice@127.0.0.1:stored.bin  (exit status 0)
+    openssh_unix_test.go:441: $ scp alice@127.0.0.1:stored.bin <tmp>/down.bin  (exit status 0)
+    openssh_unix_test.go:441: $ scp -r <tmp>/tree alice@127.0.0.1:tree-copy  (exit status 0)
+    openssh_unix_test.go:441: $ scp -r alice@127.0.0.1:tree-copy <tmp>/tree-back  (exit status 0)
+    openssh_unix_test.go:441: $ scp <tmp>/up.bin alice@127.0.0.1:tree-copy/  (exit status 0)
+    openssh_unix_test.go:464: $ scp alice@127.0.0.1:missing.bin <tmp>/missing.bin  (exit status 1)
+--- PASS: TestOpenSSHSFTPScp
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/session
+testing: warning: no tests to run
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/settings	0.077s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/sftp	0.084s [no tests to run]
+=== RUN   TestOpenSSHAgainstTheServer
+    sshtest_test.go:202: $ ssh ada@127.0.0.1 uptime -s  (exit status 0)
+    sshtest_test.go:206: $ ssh ada@127.0.0.1 fail  (exit status 3)
+    sshtest_test.go:209: $ ssh ada@127.0.0.1 uptime  (exit status 255)
+    sshtest_test.go:217: $ ssh ada@127.0.0.1 uptime  (exit status 255)
+--- PASS: TestOpenSSHAgainstTheServer
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/sshtest
+testing: warning: no tests to run
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/storage	0.071s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/storage/storagetest	0.072s [no tests to run]
+testing: warning: no tests to run
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/wine	0.079s [no tests to run]

@@ -413,7 +413,9 @@ func TestImportAFileWithTheRealApplication(t *testing.T) {
 	if err := os.WriteFile(path, []byte(key.AuthorizedKey+" from a file\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	h := newHarness(t, r.App, r.Clock, 120, 30)
+	// Wide enough for the sentence about a missing file to show its long temporary path whole
+	// (macOS has long ones).
+	h := newHarness(t, r.App, r.Clock, 200, 30)
 	h.keys("2", "enter", "i")
 	h.typeText(path)
 	h.key("enter")

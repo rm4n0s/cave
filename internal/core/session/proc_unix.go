@@ -1,3 +1,5 @@
+//go:build linux || darwin
+
 package session
 
 import (
@@ -54,15 +56,15 @@ func hangUpTerminal(_ *process, terminal *pty.Pty) {
 	_ = terminal.Close() // a terminal that is closed already is fine
 }
 
-// processGroup is what the platform keeps of the process's group: on Linux the group is the
+// processGroup is what the platform keeps of the process's group: on Linux and macOS the group is the
 // process's own and needs nothing kept.
 type processGroup struct{}
 
 // startGroup puts the process that has just started in the group that the platform ends it
-// with: on Linux it leads one (newCommand asked for it), so there is nothing to do.
+// with: on Linux and macOS it leads one (newCommand asked for it), so there is nothing to do.
 func startGroup(*process) (processGroup, error) { return processGroup{}, nil }
 
-// endGroup is called when the session is over: on Linux what a process still runs is left to
+// endGroup is called when the session is over: on Linux and macOS what a process still runs is left to
 // the system, so there is nothing to do.
 func endGroup(*process) {}
 

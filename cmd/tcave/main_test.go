@@ -21,14 +21,14 @@ type failingWriter struct{}
 func (failingWriter) Write([]byte) (int, error) { return 0, io.ErrClosedPipe }
 
 // testEnv is an environment with no variable of the user's: where the folders go comes from the
-// flags, and the runtime folder is the test's own.
+// flags, and the runtime folder is the test's own (macOS keeps it under TMPDIR).
 func testEnv(t *testing.T) func(string) (string, bool) {
 	t.Helper()
 	runtime := filepath.Join(t.TempDir(), "run")
 	if err := os.Mkdir(runtime, 0o700); err != nil {
 		t.Fatal(err)
 	}
-	vars := map[string]string{"HOME": t.TempDir(), "XDG_RUNTIME_DIR": runtime}
+	vars := map[string]string{"HOME": t.TempDir(), "XDG_RUNTIME_DIR": runtime, "TMPDIR": runtime}
 	return func(name string) (string, bool) {
 		v, ok := vars[name]
 		return v, ok

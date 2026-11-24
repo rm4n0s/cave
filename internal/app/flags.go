@@ -76,8 +76,11 @@ func usageFor(program, goos string) string {
 	fs.SetOutput(&text)
 	fs.PrintDefaults()
 	config, state := "$XDG_CONFIG_HOME/cave, else ~/.config/cave", "$XDG_STATE_HOME/cave, else ~/.local/state/cave"
-	if goos == "windows" {
+	switch goos {
+	case "windows":
 		config, state = `%AppData%\Cave`, `%LocalAppData%\Cave`
+	case "darwin":
+		config, state = "~/Library/Application Support/Cave", "~/Library/Application Support/Cave/State"
 	}
 	text.WriteString("\nThe folders, when neither a flag nor CAVE_CONFIG_DIR and CAVE_STATE_DIR name them:\n")
 	text.WriteString("  configuration  " + config + "\n")

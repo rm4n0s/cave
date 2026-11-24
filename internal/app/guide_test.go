@@ -28,7 +28,7 @@ func readDoc(t *testing.T, name string) string {
 
 func TestUsageGolden(t *testing.T) {
 	for _, program := range []string{"cave", "tcave"} {
-		for _, goos := range []string{"linux", "windows"} {
+		for _, goos := range []string{"linux", "darwin", "windows"} {
 			t.Run(program+" "+goos, func(t *testing.T) {
 				got := usageFor(program, goos)
 				path := filepath.Join("testdata", "goldens", "usage-"+program+"-"+goos+".txt")
@@ -56,6 +56,7 @@ func TestUsageGolden(t *testing.T) {
 func TestUsageNamesTheFoldersOfThePlatform(t *testing.T) {
 	for goos, want := range map[string][]string{
 		"linux":   {"$XDG_CONFIG_HOME/cave, else ~/.config/cave", "$XDG_STATE_HOME/cave, else ~/.local/state/cave"},
+		"darwin":  {"~/Library/Application Support/Cave", "~/Library/Application Support/Cave/State"},
 		"windows": {`%AppData%\Cave`, `%LocalAppData%\Cave`},
 	} {
 		text := usageFor("cave", goos)

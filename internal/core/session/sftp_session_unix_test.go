@@ -1,3 +1,5 @@
+//go:build linux || darwin
+
 package session
 
 import (
@@ -304,7 +306,7 @@ func TestClosingTheChannelEndsAnSFTPSession(t *testing.T) {
 // openFDs counts the files this process has open.
 func openFDs(t *testing.T) int {
 	t.Helper()
-	entries, err := os.ReadDir("/proc/self/fd")
+	entries, err := os.ReadDir(fdDir)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -326,13 +328,13 @@ func waitFDs(t *testing.T, want int) {
 // filesOpenOn counts the descriptors of this process that are open on a file.
 func filesOpenOn(t *testing.T, path string) int {
 	t.Helper()
-	entries, err := os.ReadDir("/proc/self/fd")
+	entries, err := os.ReadDir(fdDir)
 	if err != nil {
 		t.Fatal(err)
 	}
 	count := 0
 	for _, entry := range entries {
-		if target, err := os.Readlink("/proc/self/fd/" + entry.Name()); err == nil && target == path {
+		if fdIsFile(entry.Name(), path) {
 			count++
 		}
 	}

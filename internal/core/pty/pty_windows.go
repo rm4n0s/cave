@@ -3,6 +3,7 @@ package pty
 import (
 	"os"
 	"sync"
+	"time"
 
 	"github.com/rm4n0s/errors"
 	"golang.org/x/sys/windows"
@@ -88,6 +89,9 @@ func (p *Pty) Slave() *os.File { return nil }
 
 // CloseSlave does nothing, as there is no slave side.
 func (p *Pty) CloseSlave() {}
+
+// Release does nothing on Windows: the pseudo console has no slave side of Cave's to let go.
+func (p *Pty) Release(time.Duration) {}
 
 // Resize changes the console's size. Columns or rows that are 0 were not said and stay as they
 // are.

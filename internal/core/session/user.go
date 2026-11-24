@@ -90,5 +90,9 @@ func CurrentUser(environ []string) User {
 	}
 	u.Shell = passwdShell(passwd, account.Uid)
 	_ = passwd.Close() // a file that was only read loses nothing when its close fails
+	if u.Shell == "" {
+		// macOS keeps its accounts in its directory service, not in the account list.
+		u.Shell = directoryShell(account.Username)
+	}
 	return u
 }

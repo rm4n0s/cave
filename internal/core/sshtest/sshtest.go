@@ -465,10 +465,32 @@ func (o *OpenSSH) Start(user string, key Key, options ...string) (stop func() st
 			_ = cmd.Process.Kill() // already gone when ssh ended by itself
 			<-ended
 		})
-		return stderr.String()
+		return withoutHarmlessWarnings(stderr.String())
 	}
 	o.t.Cleanup(func() { stop() })
 	return stop
+}
+
+// harmlessWarnings are lines a real ssh writes that say nothing about Cave: the ssh of macOS
+// tries to turn off Nagle's algorithm on the Unix socket of a forward, which has none.
+var harmlessWarnings = []string{"setsockopt TCP_NODELAY: Operation not supported on socket"}
+
+// withoutHarmlessWarnings returns the error stream of ssh without the lines of
+// harmlessWarnings.
+func withoutHarmlessWarnings(stderr string) string {
+	var kept []string
+	for _, line := range strings.SplitAfter(stderr, "\n") {
+		harmless := false
+		for _, warning := range harmlessWarnings {
+			if strings.TrimRight(line, "\r\n") == warning {
+				harmless = true
+			}
+		}
+		if !harmless {
+			kept = append(kept, line)
+		}
+	}
+	return strings.Join(kept, "")
 }
 
 // StartAgent starts a real ssh-agent on a socket under a temporary folder, adds the keys to it,
