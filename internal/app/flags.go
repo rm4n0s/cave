@@ -4,6 +4,7 @@ import (
 	"flag"
 	"io"
 	"log/slog"
+	"runtime"
 	"slices"
 	"strings"
 
@@ -59,8 +60,14 @@ func flagSet(program string, f *Flags, level *string) *flag.FlagSet {
 	return fs
 }
 
-// Usage returns the text of a program's help.
+// Usage returns the text of a program's help: every flag with what it does, and the two folders
+// the program uses when neither a flag nor a CAVE_ variable names them (docs/SPEC.md §5.1).
 func Usage(program string) string {
+	return usageFor(program, runtime.GOOS)
+}
+
+// usageFor is Usage for an operating system, so that a test can check the text of both.
+func usageFor(program, goos string) string {
 	var f Flags
 	var level string
 	fs := flagSet(program, &f, &level)
@@ -68,6 +75,13 @@ func Usage(program string) string {
 	text.WriteString("Usage: " + program + " [flags]\n\n")
 	fs.SetOutput(&text)
 	fs.PrintDefaults()
+	config, state := "$XDG_CONFIG_HOME/cave, else ~/.config/cave", "$XDG_STATE_HOME/cave, else ~/.local/state/cave"
+	if goos == "windows" {
+		config, state = `%AppData%\Cave`, `%LocalAppData%\Cave`
+	}
+	text.WriteString("\nThe folders, when neither a flag nor CAVE_CONFIG_DIR and CAVE_STATE_DIR name them:\n")
+	text.WriteString("  configuration  " + config + "\n")
+	text.WriteString("  state          " + state + "\n")
 	return text.String()
 }
 

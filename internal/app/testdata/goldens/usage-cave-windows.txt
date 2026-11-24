@@ -1,0 +1,22 @@
+Usage: cave [flags]
+
+  -allow-root
+    	run although the user is root: every person gets a root shell
+  -config-dir folder
+    	the folder of the settings, the people and the host key
+  -log-level string
+    	what the log has: debug, info, warn or error (default "info")
+  -no-start
+    	do not start the server at launch
+  -page page
+    	the page to show first: overview, people, attempts, connections, settings
+  -port port
+    	listen on this port for this run, whatever the settings say
+  -state-dir folder
+    	the folder of the attempts list, the log and the lock
+  -version
+    	print the version and exit
+
+The folders, when neither a flag nor CAVE_CONFIG_DIR and CAVE_STATE_DIR name them:
+  configuration  %AppData%\Cave
+  state          %LocalAppData%\Cave
