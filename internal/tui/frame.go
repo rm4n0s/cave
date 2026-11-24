@@ -126,6 +126,8 @@ func (m Model) pageLines(height int) []string {
 	switch m.page {
 	case pageOverview:
 		return m.overviewLines(height)
+	case pageAttempts:
+		return m.attemptLines(height)
 	case pagePeople:
 		if m.personID != "" {
 			return m.personLines(height)

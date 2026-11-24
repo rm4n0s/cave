@@ -1,0 +1,16 @@
+Cave   running on port 2222         1 connected · 9 attempts
+1 Overview 2 People [3 Attempts] 4 Connections 5 Settings   
+────────────────────────────────────────────────────────────
+Filter: All   Search: —   Cleared 3 d ago · next clear in 4…
+  Who      Address         Result           Count Last      
+> alice    198.51.100.7    Accepted             3 12 min ago
+  Unknown  203.0.113.9     Unknown name      1204 20 min ago
+  Unknown  203.0.113.10    Unknown name         3 1 h ago   
+  alice    198.51.100.23   Wrong key            3 3 h ago   
+  Unknown  2001:db8::77    No key offered       1 5 h ago   
+  alice    198.51.100.30   Key not proven       1 1 d ago   
+  bob      192.0.2.50      Disabled person      3 2 d ago   
+  Unknown  192.0.2.60      Not SSH or brok…     1 4 d ago   
+────────────────────────────────────────────────────────────
+                                                            
+f filter / search enter show d remove C clear ? keys q quit 

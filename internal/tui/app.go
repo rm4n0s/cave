@@ -35,4 +35,6 @@ type App interface {
 	ImportKeys(ctx context.Context, personID, path string) ([]people.Key, error)
 	SetKeyComment(ctx context.Context, personID, keyID, comment string) error
 	RemoveKey(ctx context.Context, personID, keyID string) error
+	ClearAttempts(ctx context.Context) error
+	RemoveAttempt(ctx context.Context, id string) error
 }

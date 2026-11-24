@@ -70,7 +70,9 @@ func pageBindings(p page) []binding {
 		return []binding{{"s", "start or stop the server"}}
 	case pagePeople:
 		return []binding{{"enter", "open"}, {"a", "add"}, {"e", "rename"}, {"space", "on/off"}, {"d", "remove"}}
-	case pageAttempts, pageConnections, pageSettings:
+	case pageAttempts:
+		return []binding{{"f", "filter"}, {"/", "search"}, {"enter", "show"}, {"d", "remove"}, {"C", "clear"}}
+	case pageConnections, pageSettings:
 		return nil
 	}
 	return nil
@@ -103,6 +105,9 @@ func (m Model) pageKeys() []binding {
 	if m.page == pagePeople && m.personID != "" {
 		return personBindings()
 	}
+	if m.page == pageAttempts && m.attemptDetail {
+		return []binding{{"esc", "back"}}
+	}
 	return pageBindings(m.page)
 }
 
@@ -110,6 +115,9 @@ func (m Model) pageKeys() []binding {
 func (m Model) keysTitle() string {
 	if m.page == pagePeople && m.personID != "" {
 		return "a person"
+	}
+	if m.page == pageAttempts && m.attemptDetail {
+		return "an attempt"
 	}
 	return m.page.title()
 }

@@ -77,6 +77,14 @@ type Model struct {
 	personID string
 	keyList  list
 	keySel   string
+
+	// The Attempts page: the filter (0 all, 1 accepted, 2 refused), the search, the selection
+	// kept by the entry's id, and whether the details of the selected entry are shown.
+	attemptFilter int
+	attemptSearch string
+	attemptList   list
+	attemptSel    string
+	attemptDetail bool
 	// message is the text of the message line; messageErr says that it is an error.
 	message    string
 	messageErr bool
@@ -106,6 +114,7 @@ func (m *Model) refresh() {
 	m.settings = m.app.Settings()
 	m.syncPeople()
 	m.syncKeys()
+	m.syncAttempts()
 }
 
 // Init starts nothing: the program sends the size by itself.
@@ -120,6 +129,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 		m.peopleList.setHeight(m.height - chrome - 1)
 		m.keyList.setHeight(m.height - chrome - 2)
+		m.attemptList.setHeight(m.height - chrome - 2)
 	case changedMsg, tickMsg:
 		m.refresh()
 	case doneMsg:
@@ -208,8 +218,12 @@ func (m Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	case "s":
 		return m, m.toggleServer()
 	default:
-		if m.page == pagePeople {
+		switch m.page {
+		case pagePeople:
 			return m.keyPeople(msg)
+		case pageAttempts:
+			return m.keyAttempts(msg)
+		case pageOverview, pageConnections, pageSettings, pageCount:
 		}
 	}
 	return m, nil

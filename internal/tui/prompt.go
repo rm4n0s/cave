@@ -21,6 +21,10 @@ type prompt struct {
 	busy bool
 	// run makes the command for the text. It gives back a promptDone with the same id.
 	run func(id int, text string) tea.Cmd
+	// live, when it is set, is called with the text after every change of it: a search follows
+	// what is typed. cancel, when it is set, is called when Esc closes the prompt.
+	live   func(m Model, text string) Model
+	cancel func(m Model) Model
 }
 
 // promptDone is the end of a prompt's command: the prompt closes, or shows why it failed.
@@ -37,6 +41,14 @@ func (m *Model) openPrompt(label, text string, limit int, run func(id int, text 
 	m.prompt = &prompt{id: m.promptSeq, label: label, f: newField(text, limit), run: run}
 }
 
+// openLivePrompt opens a prompt whose text is followed as it changes (live) and that does
+// something when Esc closes it (cancel); either may be nil.
+func (m *Model) openLivePrompt(label, text string, limit int, run func(id int, text string) tea.Cmd,
+	live func(Model, string) Model, cancel func(Model) Model) {
+	m.openPrompt(label, text, limit, run)
+	m.prompt.live, m.prompt.cancel = live, cancel
+}
+
 // keyPrompt handles a key while a prompt is open.
 func (m Model) keyPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	p := *m.prompt
@@ -45,6 +57,9 @@ func (m Model) keyPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.quit()
 	case "esc":
 		m.prompt = nil
+		if p.cancel != nil {
+			m = p.cancel(m)
+		}
 		return m, nil
 	case "enter":
 		if p.busy {
@@ -56,6 +71,9 @@ func (m Model) keyPrompt(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	}
 	p.f.key(msg)
 	m.prompt = &p
+	if p.live != nil {
+		m = p.live(m, p.f.value())
+	}
 	return m, nil
 }
 
@@ -64,6 +82,9 @@ func (m Model) pastePrompt(text string) Model {
 	p := *m.prompt
 	p.f.paste(text)
 	m.prompt = &p
+	if p.live != nil {
+		m = p.live(m, p.f.value())
+	}
 	return m
 }
 
