@@ -160,12 +160,14 @@ Flags for one run, never saved: `--port <n>`, `--no-start` (do not start the ser
 - `id`: `p_` and 16 hexadecimal digits from `crypto/rand`; keys have `k_` ids. Ids never change.
 - `name`: the login name. 1 to 32 characters of `A–Z a–z 0–9 . _ -`, not starting with `-` or `.`. Unique ignoring case (`PersonNameTaken`); compared exactly at login. A bad name is `PersonNameInvalid`.
 - `enabled`: a disabled person cannot connect; their keys stay.
+- A person or key that a command names and that does not exist is `PersonNotFound` or `KeyNotFound`. A `people.json` that breaks one of these rules (a bad or repeated id or name, a key that is not acceptable or is there twice) is `PeopleFileInvalid`.
 - A person may have no key (then they cannot connect).
 - Renaming, disabling or removing a person, or removing a key, **disconnects** every connection that was authenticated as that person (rename, disable, remove) or with that key (remove key).
 
 ### 7.2 Keys
 
 - Input is text in the `authorized_keys` format: one key per line, `<type> <base64> [comment]`. Blank lines and lines starting with `#` are skipped. Several lines add several keys; either all are added or none.
+- Text without any key is `KeyTextEmpty`. A key that is in the text twice is taken once. An error about a line has the line's number.
 - A line with options before the type (`command="…" ssh-ed25519 …`) is refused: `KeyOptionsUnsupported`.
 - Accepted types: `ssh-ed25519`, `ecdsa-sha2-nistp256`, `ecdsa-sha2-nistp384`, `ecdsa-sha2-nistp521`, `ssh-rsa` (2048 bits or more, else `KeyTooWeak`), `sk-ssh-ed25519@openssh.com`, `sk-ecdsa-sha2-nistp256@openssh.com`. Anything else, certificates and `ssh-dss` included: `KeyTypeUnsupported`. Text that is not a public key: `KeyParseFailed`; a private key pasted by mistake: `KeyIsPrivate` (the message says to paste the `.pub` file, and the text is not stored or logged).
 - A key belongs to at most one person. Adding a key that somebody already has: `KeyAlreadyAssigned` (metadata: the owner's name and the fingerprint).
