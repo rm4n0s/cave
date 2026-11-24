@@ -828,3 +828,36 @@ func TestSubscribeCancel(t *testing.T) {
 		t.Errorf("first = %d, second = %d; want 1 and 2", first, second)
 	}
 }
+
+func TestThePeopleFileIsPrivate(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the mode bits mean nothing on Windows: the access is the profile's ACLs (docs/SPEC.md §13.1)")
+	}
+	f := newFixture(t)
+	p := f.add(t, "alice")
+	f.addKey(t, p.ID, newEd25519(t), "laptop")
+	path := filepath.Join(f.dirs.Config, FileName)
+	for name, want := range map[string]os.FileMode{path: 0o600, f.dirs.Config: os.ModeDir | 0o700} {
+		info, err := os.Stat(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if info.Mode() != want {
+			t.Errorf("%s has the mode %v, want %v", name, info.Mode(), want)
+		}
+	}
+	// A rewrite keeps it so: every change writes a new temporary file and renames it over.
+	f.add(t, "bob")
+	if info, err := os.Stat(path); err != nil || info.Mode() != 0o600 {
+		t.Errorf("after a second write the file is %v, %v", info, err)
+	}
+	entries, err := os.ReadDir(f.dirs.Config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, e := range entries {
+		if e.Name() != FileName {
+			t.Errorf("%s is left behind next to the people file", e.Name())
+		}
+	}
+}

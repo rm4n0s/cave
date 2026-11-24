@@ -42,7 +42,7 @@ Wine has no OpenSSH, and ignores `FILE_FLAG_FIRST_PIPE_INSTANCE` (the test of a 
 ssh -A <person>@<pc> ssh-add -l
 ```
 
-Does it list the key of your agent (the one of the computer you typed it on, not the PC's)? Does `echo %SSH_AUTH_SOCK%` in `ssh -A <person>@<pc>` print `\\.\pipe\cave-agent-…`?
+Does it list the key of your agent (the one of the computer you typed it on, not the PC's)? Does `echo %SSH_AUTH_SOCK%` in `ssh -A <person>@<pc>` print `\\.\pipe\cave-agent-…`? From another computer on the network, can that pipe be opened (`\\<pc>\pipe\cave-agent-…`)? It must not be: the pipe refuses remote clients.
 
 ## Step 7.5: the programs on a Windows PC
 
