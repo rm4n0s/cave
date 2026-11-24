@@ -137,3 +137,14 @@ One entry per finished step of `docs/IMPLEMENTATION.md`, newest last. Format:
 - **Proof**: none
 - **Manual checks**: none
 - **Glutter issues**: none
+
+## Step 2.3: Connections
+- **Date**: 2026-11-24
+- **Branch**: feat/step-2.3-connections
+- **Summary**: the registry of authenticated connections (`Server.Connections`, `Disconnect`, `DisconnectAll`), each with its person, key, address, client version, start time and activities; the dispatch of what a client asks for to handlers registered by type (`HandleChannel`, `HandleRequest`), with `Conn` as the handlers' view of the connection (`AddActivity`, `SSH`, the person, the addresses); the limit of 256 channels per connection; `keepalive@openssh.com` answered and `no-more-sessions@openssh.com` obeyed; connections closed when their person is renamed, disabled or removed or their key is removed.
+- **Decisions**: `Subscribe` now tells which kind of change it was (`StateChanged`, `ConnectionsChanged`). A channel handler returns when its channel is done, and a connection waits for its handlers before it leaves the registry, so `Stop` returns with nothing left running. A channel type or request without a handler is refused (`unknown channel type`, a failure reply). After a connection is put in the registry, its person is looked up once more, so that a change made between the key's check and the registry still ends it. Handlers are registered before `Start`; the maps are replaced, never changed.
+- **Checks**: `scripts/checks.sh` passed, every check (gofmt, vet for Linux and Windows, golangci-lint 0 issues, race tests as a debug build, cgo-free build and tests, Windows build, error tags: none untested, the Wine run). The server's tests were also run 8 times in a row under the race detector.
+- **Tests**: the registry's content, order and events while clients come and go; `Disconnect` of one, of one that is gone, and of all; nine changes of the people, each closing exactly the connections it should (and adding a key, a comment, a person closing none); the 256-channel limit per connection and room again after a close; unknown channel types; global requests with and without a handler and their payloads; no more sessions; activities shown, cut to 80 characters, made safe and removed; `Stop` leaves an empty registry and no running handler; a person disabled during the handshake does not stay connected.
+- **Proof**: none
+- **Manual checks**: none
+- **Glutter issues**: none

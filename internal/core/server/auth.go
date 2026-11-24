@@ -149,21 +149,5 @@ func (s *Server) serve(conn net.Conn) {
 		Outcome: attempts.Accepted, PersonID: perms[extPersonID], PersonName: perms[extPersonName], LoginName: sshConn.User(),
 		Address: address, ClientVersion: string(sshConn.ClientVersion()), Keys: []string{perms[extKeyFingerprint]},
 	})
-	s.serveAuthenticated(sshConn, channels, requests)
-}
-
-// serveAuthenticated runs an authenticated connection until it ends.
-func (s *Server) serveAuthenticated(conn *ssh.ServerConn, channels <-chan ssh.NewChannel, requests <-chan *ssh.Request) {
-	// TODO(step 2.3): the registry of connections and the dispatch of channels and requests.
-	go func() {
-		for req := range requests {
-			if req.WantReply {
-				_ = req.Reply(false, nil) // a reply that cannot be sent means the connection is gone
-			}
-		}
-	}()
-	for channel := range channels {
-		_ = channel.Reject(ssh.Prohibited, "not available") // as above
-	}
-	_ = conn.Close() // the channels ended because the connection did
+	s.serveAuthenticated(sshConn, channels, requests, address)
 }

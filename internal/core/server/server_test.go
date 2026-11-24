@@ -587,24 +587,6 @@ func TestIdentificationAndHostKey(t *testing.T) {
 	}
 }
 
-func TestNothingIsAvailableAfterAuthenticationYet(t *testing.T) {
-	f := newFixture(t)
-	_, key := f.person("alice")
-	client, err := f.dial(f.config("alice", key))
-	if err != nil {
-		t.Fatal(err)
-	}
-	_, err = client.NewSession()
-	var openErr *ssh.OpenChannelError
-	if !errors.As(err, &openErr) || openErr.Reason != ssh.Prohibited {
-		t.Errorf("a session: %v", err)
-	}
-	ok, _, err := client.SendRequest("tcpip-forward", true, nil)
-	if err != nil || ok {
-		t.Errorf("a global request: ok = %v, err = %v", ok, err)
-	}
-}
-
 func TestLimits(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("the test connects from several loopback addresses, which Linux has without setup")
@@ -704,7 +686,10 @@ func TestStartAndStop(t *testing.T) {
 	_, key := f.person("alice")
 	var states []string
 	var mu sync.Mutex
-	f.server.Subscribe(func() {
+	f.server.Subscribe(func(change Change) {
+		if change != StateChanged {
+			return
+		}
 		mu.Lock()
 		defer mu.Unlock()
 		states = append(states, f.server.State().String())
@@ -783,7 +768,7 @@ func TestStartErrors(t *testing.T) {
 		f := newStopped(t)
 		f.server.opts.Address = func(settings.Snapshot) string { return taken.Addr().String() }
 		var states []string
-		f.server.Subscribe(func() { states = append(states, f.server.State().String()) })
+		f.server.Subscribe(func(Change) { states = append(states, f.server.State().String()) })
 		meta := errtest.Route(t, f.server.Start(ctx), "Server.Start.ListenFailed")
 		if meta["address"] != taken.Addr().String() {
 			t.Errorf("metadata = %v", meta)

@@ -119,6 +119,12 @@ type Server struct {
 	hostKey  ssh.Signer
 	// conns are the open connections, authenticated or not.
 	conns map[net.Conn]struct{}
+	// connections is the registry: the authenticated connections by their ids.
+	connections map[string]*Conn
+	// channelHandlers and requestHandlers serve what authenticated clients ask for, by type.
+	// They are replaced, never changed, so that a connection can keep the maps it started with.
+	channelHandlers map[string]ChannelHandler
+	requestHandlers map[string]RequestHandler
 	// pending counts the connections that are not yet authenticated, in all and by address.
 	pending          int
 	pendingByAddress map[string]int
@@ -133,12 +139,13 @@ type Server struct {
 // subscription is one listener of a Server.
 type subscription struct {
 	id int
-	fn func()
+	fn func(Change)
 }
 
-// New returns a stopped server.
+// New returns a stopped server. It follows the people from now on: a change that makes a
+// connection invalid closes it.
 func New(opts Options) *Server {
-	return &Server{
+	s := &Server{
 		opts: opts,
 		listen: func(ctx context.Context, address string) (net.Listener, error) {
 			var config net.ListenConfig
@@ -146,8 +153,13 @@ func New(opts Options) *Server {
 		},
 		hostKey:          opts.HostKey,
 		conns:            map[net.Conn]struct{}{},
+		connections:      map[string]*Conn{},
+		channelHandlers:  map[string]ChannelHandler{},
+		requestHandlers:  map[string]RequestHandler{},
 		pendingByAddress: map[string]int{},
 	}
+	opts.People.Subscribe(s.peopleChanged)
+	return s
 }
 
 // State returns what the server is doing.
@@ -179,7 +191,7 @@ func (s *Server) setState(state State) {
 	s.mu.Lock()
 	s.state = state
 	s.mu.Unlock()
-	s.notify()
+	s.notify(StateChanged)
 }
 
 // address returns the "host:port" to listen on.
@@ -204,7 +216,7 @@ func (s *Server) Start(ctx context.Context) error {
 	}
 	s.state = Starting
 	s.mu.Unlock()
-	s.notify()
+	s.notify(StateChanged)
 
 	address := s.address()
 	listener, err := s.listen(ctx, address)
@@ -219,7 +231,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.mu.Unlock()
 	s.opts.Logger.Info("listening", "address", listener.Addr().String())
 	go s.accept(listener)
-	s.notify()
+	s.notify(StateChanged)
 	return nil
 }
 
@@ -239,7 +251,7 @@ func (s *Server) Stop(ctx context.Context) error {
 		open = append(open, conn)
 	}
 	s.mu.Unlock()
-	s.notify()
+	s.notify(StateChanged)
 
 	// Closing is how the goroutines are told to end; a close that fails leaves nothing to do.
 	_ = listener.Close()
@@ -350,9 +362,9 @@ func (s *Server) record(a attempts.Attempt) {
 		"person", entry.PersonName, "clientVersion", entry.ClientVersion, "count", entry.Count)
 }
 
-// Subscribe registers a function that is called after each change of the server's state. The
-// returned function ends the subscription.
-func (s *Server) Subscribe(listener func()) (cancel func()) {
+// Subscribe registers a function that is called after each change of the server's state and of
+// its connections, with which of the two it was. The returned function ends the subscription.
+func (s *Server) Subscribe(listener func(Change)) (cancel func()) {
 	s.listenersMu.Lock()
 	defer s.listenersMu.Unlock()
 	id := s.nextID
@@ -372,11 +384,11 @@ func (s *Server) Subscribe(listener func()) (cancel func()) {
 }
 
 // notify calls the listeners, in the order they subscribed, outside the locks.
-func (s *Server) notify() {
+func (s *Server) notify(change Change) {
 	s.listenersMu.Lock()
 	listeners := s.listeners
 	s.listenersMu.Unlock()
 	for _, sub := range listeners {
-		sub.fn()
+		sub.fn(change)
 	}
 }
