@@ -9,6 +9,8 @@
 package gui
 
 import (
+	"context"
+
 	"github.com/rm4n0s/cave/internal/app"
 	"github.com/rm4n0s/cave/internal/core/people"
 	"github.com/rm4n0s/cave/internal/core/server"
@@ -24,4 +26,6 @@ type App interface {
 	Connections() []server.Connection
 	Settings() settings.Snapshot
 	Subscribe(fn func(app.Event)) (cancel func())
+	StartServer(ctx context.Context) error
+	StopServer(ctx context.Context) error
 }

@@ -50,19 +50,14 @@ func TestNavigation(t *testing.T) {
 			if err := presence(tester, gluttertest.ByType[*m.NavigationBar](), tt.wantBar); err != nil {
 				t.Errorf("bar: %v", err)
 			}
-			// The label of the page that is shown is on its destination and on its headline; the
-			// label of another page is on its destination only. Settings is shown first, so every
-			// page is tapped from another one.
-			for i, d := range destinations {
-				if i != len(destinations)-1 {
-					if err := gluttertest.FindsOneWidget(tester, gluttertest.ByText(d.label)); err != nil {
-						t.Errorf("destination %d (%s) before the tap: %v", i, d.label, err)
-					}
-				}
-				tester.Tap(gluttertest.ByText(d.label))
+			// Every page is tapped from another one, by its icon: the words of a page can be on its
+			// content too.
+			icons := []func() m.IconData{m.Icons.Dashboard, m.Icons.People, m.Icons.History, m.Icons.Lan, m.Icons.Settings}
+			for i := range destinations {
+				tester.Tap(gluttertest.ByIcon(icons[i]()))
 				tester.PumpAndSettle()
-				if err := gluttertest.FindsNWidgets(tester, gluttertest.ByText(d.label), 2); err != nil {
-					t.Errorf("page %d (%s): %v", i, d.label, err)
+				if got := currentPage(t, tester); got != i {
+					t.Errorf("after tapping destination %d the page is %d", i, got)
 				}
 			}
 		})
@@ -78,12 +73,22 @@ func presence(tester *gluttertest.Tester, f gluttertest.Finder, want bool) error
 }
 
 func TestTheFirstPage(t *testing.T) {
-	tester := pump(t, apptest.Sample(t), testutil.Wide, "attempts")
-	if err := gluttertest.FindsNWidgets(tester, gluttertest.ByText("Attempts"), 2); err != nil {
-		t.Errorf("the Attempts page is not first: %v", err)
+	for i, name := range app.Pages {
+		if got := currentPage(t, pump(t, apptest.Sample(t), testutil.Wide, name)); got != i {
+			t.Errorf("--page %s shows page %d, want %d", name, got, i)
+		}
 	}
-	if err := gluttertest.FindsNWidgets(tester, gluttertest.ByText("Overview"), 1); err != nil {
-		t.Errorf("the Overview headline is on screen: %v", err)
+	if got := currentPage(t, pump(t, apptest.Sample(t), testutil.Wide, "")); got != pageOverview {
+		t.Errorf("no page shows page %d, want the Overview", got)
+	}
+}
+
+func TestPageIndexesFollowAppPages(t *testing.T) {
+	want := map[int]string{pageOverview: "overview", pagePeople: "people", pageAttempts: "attempts", pageConnections: "connections", pageSettings: "settings"}
+	for i, name := range want {
+		if app.Pages[i] != name {
+			t.Errorf("app.Pages[%d] is %q, the constant says %q", i, app.Pages[i], name)
+		}
 	}
 }
 
@@ -92,7 +97,7 @@ func TestTheThemeFollowsTheSetting(t *testing.T) {
 	f.SettingsSnapshot = apptest.SampleSettings(t, map[string]any{"ui.theme": "light"})
 	tester := pump(t, f, testutil.Wide, "")
 	brightness := func() ui.Brightness {
-		return m.ThemeOf(tester.Element(gluttertest.ByType[*headline]())).Brightness()
+		return m.ThemeOf(tester.Element(gluttertest.ByType[*shell]())).Brightness()
 	}
 	if got := brightness(); got != ui.BrightnessLight {
 		t.Fatalf("brightness = %v, want light", got)
@@ -108,7 +113,8 @@ func TestTheThemeFollowsTheSetting(t *testing.T) {
 
 func TestTheBadgeFollowsTheConnections(t *testing.T) {
 	f := apptest.Empty(t)
-	tester := pump(t, f, testutil.Wide, "")
+	// The Settings page is a headline, so the only 3 on the screen is the badge's.
+	tester := pump(t, f, testutil.Wide, "settings")
 	badge := gluttertest.ByKey(foundation.NewKey("connections-badge"))
 	if err := gluttertest.FindsNothing(tester, badge); err != nil {
 		t.Fatalf("a badge with nobody connected: %v", err)

@@ -13,6 +13,15 @@ import (
 // below it, the pages are chosen with a bar at the bottom.
 const wideFrom = 800.0
 
+// The indexes of the pages, in the order of app.Pages.
+const (
+	pageOverview = iota
+	pagePeople
+	pageAttempts
+	pageConnections
+	pageSettings
+)
+
 // destination is one page in the navigation.
 type destination struct {
 	label string
@@ -92,8 +101,13 @@ func barDestinations(v *view) []m.Widget {
 	return out
 }
 
-// pageFor returns the widget of the page the view is on. For now every page is its name.
+// pageFor returns the widget of the page the view is on. A page that has no widget yet is its
+// name as a headline.
 func pageFor(v *view) m.Widget {
+	switch v.page {
+	case pageOverview:
+		return newOverviewPage(v)
+	}
 	return newHeadline(destinations[v.page].label)
 }
 

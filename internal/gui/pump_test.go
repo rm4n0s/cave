@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/rm4n0s/glutter/gluttertest"
+	m "github.com/rm4n0s/glutter/material"
 	"github.com/rm4n0s/glutter/ui"
 
 	"github.com/rm4n0s/cave/internal/gui/testutil"
@@ -23,8 +24,23 @@ func syncRunner(work func(ctx context.Context) error, done func(err error)) {
 // the first) and pumps until the tree settles.
 func pump(t *testing.T, a App, size ui.Size, page string) *gluttertest.Tester {
 	t.Helper()
+	return pumpWith(t, a, size, page, syncRunner)
+}
+
+// pumpWith is pump with a runner of the test's own, for a test that holds a command back.
+func pumpWith(t *testing.T, a App, size ui.Size, page string, run runner) *gluttertest.Tester {
+	t.Helper()
 	tester := testutil.NewTester(t, size)
-	tester.PumpWidget(newRoot(context.Background(), a, Options{Page: page, Version: "0.0.0-test"}, syncRunner))
+	tester.PumpWidget(newRoot(context.Background(), a, Options{Page: page, Version: "0.0.0-test"}, run))
 	tester.PumpAndSettle()
 	return tester
+}
+
+// currentPage is the index of the page that is shown, read from the navigation that is on screen.
+func currentPage(t *testing.T, tester *gluttertest.Tester) int {
+	t.Helper()
+	if tester.Exists(gluttertest.ByType[*m.NavigationRail]()) {
+		return gluttertest.WidgetAs[*m.NavigationRail](tester, gluttertest.ByType[*m.NavigationRail]()).SelectedIndex().Value()
+	}
+	return gluttertest.WidgetAs[*m.NavigationBar](tester, gluttertest.ByType[*m.NavigationBar]()).SelectedIndex()
 }
