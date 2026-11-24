@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rm4n0s/cave/internal/core/pty"
 	"github.com/rm4n0s/cave/internal/core/sanitize"
 	"github.com/rm4n0s/cave/internal/core/server"
 	"github.com/rm4n0s/cave/internal/core/settings"
@@ -36,6 +37,8 @@ const (
 	startFailedStatus = 255
 	// maxCommandLog bounds a command in the log and in the registry.
 	maxCommandLog = 80
+	// maxTermLength bounds the terminal type of a pty-req.
+	maxTermLength = 128
 )
 
 // Options are what the session handler needs. Every field is required.
@@ -70,6 +73,9 @@ type session struct {
 	channel ssh.Channel
 	// env holds the variables the client set.
 	env map[string]string
+	// pty is the session's pseudo terminal, and term its type; nil and "" without a pty-req.
+	pty  *pty.Pty
+	term string
 	// proc is the running process, or nil before one was started.
 	proc *process
 	// done is closed when the process ended and its output and status were sent.
@@ -92,6 +98,13 @@ func (h *handler) serve(_ context.Context, conn *server.Conn, newChannel ssh.New
 	}
 	s := &session{h: h, conn: conn, channel: channel, env: map[string]string{}, done: make(chan struct{})}
 	defer func() { _ = channel.Close() }() // a close that fails means the channel is closed already
+	defer func() {
+		// Closing the terminal is what tells a process that is still on it that the session is
+		// gone: the system sends it SIGHUP.
+		if s.pty != nil {
+			_ = s.pty.Close()
+		}
+	}()
 	for {
 		select {
 		case request, ok := <-requests:
@@ -126,9 +139,15 @@ func (s *session) request(request *ssh.Request) {
 		if err := ssh.Unmarshal(request.Payload, &payload); err == nil && s.proc != nil {
 			ok = signalProcess(s.proc.cmd, payload.Signal)
 		}
+	case "pty-req":
+		ok = s.requestPty(request.Payload)
+	case "window-change":
+		var size struct{ Cols, Rows, Width, Height uint32 }
+		if err := ssh.Unmarshal(request.Payload, &size); err == nil && s.pty != nil {
+			ok = s.pty.Resize(pty.Size{Cols: size.Cols, Rows: size.Rows, Width: size.Width, Height: size.Height}) == nil
+		}
 	case "break":
 		ok = true
-		// TODO(step 2.5): pty-req and window-change.
 		// TODO(step 3.1): the sftp subsystem.
 		// TODO(step 3.5): auth-agent-req@openssh.com.
 	}
@@ -157,6 +176,49 @@ func (s *session) setEnv(payload []byte) bool {
 	return true
 }
 
+// requestPty handles a pty-req: a pseudo terminal of the size and with the modes asked, for the
+// process to come. It is granted once per channel, before the process starts.
+func (s *session) requestPty(payload []byte) bool {
+	var req struct {
+		Term                      string
+		Cols, Rows, Width, Height uint32
+		Modes                     string
+	}
+	if err := ssh.Unmarshal(payload, &req); err != nil {
+		return false
+	}
+	if s.proc != nil || s.pty != nil || !validTerm(req.Term) {
+		return false
+	}
+	logger := s.h.opts.Logger.With("connection", s.conn.ID(), "person", s.conn.PersonName())
+	modes, err := pty.ParseModes([]byte(req.Modes))
+	if err != nil {
+		logger.Warn("pty-req refused", "err", err)
+		return false
+	}
+	terminal, err := pty.Open(pty.Size{Cols: req.Cols, Rows: req.Rows, Width: req.Width, Height: req.Height}, modes)
+	if err != nil {
+		logger.Warn("pty-req refused", "err", err)
+		return false
+	}
+	s.pty, s.term = terminal, req.Term
+	return true
+}
+
+// validTerm says whether a terminal type may go into TERM: printable ASCII without spaces, of a
+// sane length. An empty type is allowed, and sets no TERM.
+func validTerm(term string) bool {
+	if len(term) > maxTermLength {
+		return false
+	}
+	for i := 0; i < len(term); i++ {
+		if term[i] <= ' ' || term[i] > '~' {
+			return false
+		}
+	}
+	return true
+}
+
 // start starts the session's process: a login shell, or the shell running a command. Only the
 // first start of a channel does anything; it reports whether the request is granted. A process
 // that cannot start is told to the client on the error stream with status 255, as when sshd's
@@ -167,10 +229,14 @@ func (s *session) start(command string, login bool) bool {
 	}
 	snap := s.h.opts.Settings.Snapshot()
 	shell := PickShell(snap.String(settings.SessionShell), s.h.opts.User, s.h.opts.Environ)
-	env := BuildEnv(EnvInput{
+	in := EnvInput{
 		User: s.h.opts.User.Name, Home: s.h.opts.User.Home, Shell: shell, Cave: s.h.opts.Environ, Client: s.env,
 		Remote: s.conn.RemoteAddr(), Local: s.conn.LocalAddr(), Person: s.conn.PersonName(),
-	})
+	}
+	if s.pty != nil {
+		in.Term, in.TTY = s.term, s.pty.Name()
+	}
+	env := BuildEnv(in)
 	kind, detail := server.ActivityExec, command
 	if login {
 		kind, detail = server.ActivityShell, ""
@@ -178,7 +244,7 @@ func (s *session) start(command string, login bool) bool {
 	logCommand := sanitize.Display(command, maxCommandLog)
 	logger := s.h.opts.Logger.With("connection", s.conn.ID(), "person", s.conn.PersonName(), "kind", string(kind), "command", logCommand)
 
-	proc, stdout, stderr, err := s.h.spawn(shell, command, login, env, s.channel)
+	proc, stdout, stderr, err := s.h.spawn(shell, command, login, env, s.channel, s.pty)
 	if err != nil {
 		logger.Error("session could not start", "err", err)
 		s.proc = &process{} // the channel had its one start
@@ -195,15 +261,18 @@ func (s *session) start(command string, login bool) bool {
 	// The output goes to the client until the pipes end: when the process and everything it
 	// started have closed them.
 	var copies sync.WaitGroup
-	copies.Add(2)
+	copies.Add(1)
 	go func() {
 		defer copies.Done()
 		_, _ = io.Copy(s.channel, stdout) // an error is the channel or the pipe ending
 	}()
-	go func() {
-		defer copies.Done()
-		_, _ = io.Copy(s.channel.Stderr(), stderr) // as above
-	}()
+	if stderr != nil { // a terminal has one stream
+		copies.Add(1)
+		go func() {
+			defer copies.Done()
+			_, _ = io.Copy(s.channel.Stderr(), stderr) // as above
+		}()
+	}
 	go func() {
 		status, signal := wait(proc.cmd)
 		close(proc.exited)
@@ -219,7 +288,9 @@ func (s *session) start(command string, login bool) bool {
 		case <-time.After(DrainTime):
 		}
 		_ = stdout.Close() // ends a copy that is still waiting; closed twice is fine
-		_ = stderr.Close()
+		if stderr != nil {
+			_ = stderr.Close()
+		}
 		copies.Wait()
 		remove()
 		logger.Info("session ended", "status", status, "signal", signal)
@@ -254,34 +325,20 @@ func (s *session) hangUp() {
 	select {
 	case <-s.proc.exited:
 	default:
+		if s.pty != nil {
+			_ = s.pty.Close() // the system sends SIGHUP to the processes on the terminal
+			return
+		}
 		hangUpProcess(s.proc.cmd)
 	}
 }
 
-// spawn starts the process with pipes for its three streams, and returns the read ends of its
-// output. Its input is what the client sends on the channel, until the client ends it.
-func (h *handler) spawn(shell, command string, login bool, env []string, stdin io.Reader) (*process, *os.File, *os.File, error) {
-	var files []*os.File
-	closeAll := func() {
-		for _, f := range files {
-			_ = f.Close() // nothing was written through them
-		}
-	}
-	ends := make([]*os.File, 0, 6)
-	for i := 0; i < 3; i++ {
-		r, w, err := h.pipe()
-		if err != nil {
-			closeAll()
-			return nil, nil, nil, errors.NewErr(TagSessionPipeFailed, err)
-		}
-		files = append(files, r, w)
-		ends = append(ends, r, w)
-	}
-	inR, inW, outR, outW, errR, errW := ends[0], ends[1], ends[2], ends[3], ends[4], ends[5]
-
-	cmd, err := newCommand(shell, command, login)
+// spawn starts the process and returns what to read its output from: the terminal when the
+// session has one (and then no separate error stream), else the read ends of two pipes. Its
+// input is what the client sends on the channel, until the client ends it.
+func (h *handler) spawn(shell, command string, login bool, env []string, stdin io.Reader, terminal *pty.Pty) (*process, *os.File, *os.File, error) {
+	cmd, err := newCommand(shell, command, login, terminal != nil)
 	if err != nil {
-		closeAll()
 		return nil, nil, nil, err
 	}
 	cmd.Env = env
@@ -289,18 +346,53 @@ func (h *handler) spawn(shell, command string, login bool, env []string, stdin i
 	if info, statErr := os.Stat(cmd.Dir); statErr != nil || !info.IsDir() {
 		cmd.Dir = rootDir
 	}
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = inR, outW, errW
+
+	// files are the pipes' ends, in the order: input (read, write), output, error.
+	var files []*os.File
+	closeAll := func() {
+		for _, f := range files {
+			_ = f.Close() // nothing was written through them
+		}
+	}
+	if terminal != nil {
+		slave := terminal.Slave()
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = slave, slave, slave
+	} else {
+		for i := 0; i < 3; i++ {
+			r, w, err := h.pipe()
+			if err != nil {
+				closeAll()
+				return nil, nil, nil, errors.NewErr(TagSessionPipeFailed, err)
+			}
+			files = append(files, r, w)
+		}
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = files[0], files[3], files[5]
+	}
 	if err := cmd.Start(); err != nil {
 		closeAll()
 		return nil, nil, nil, errors.NewErr(TagSessionStartFailed, err).SetMetadata("shell", sanitize.Display(shell, maxCommandLog))
 	}
+	proc := &process{cmd: cmd, exited: make(chan struct{})}
+
+	if terminal != nil {
+		// The process has the terminal; Cave keeps only the master side.
+		terminal.CloseSlave()
+		master := terminal.Master()
+		go func() {
+			// It ends when the client ends its side or the terminal is closed. A terminal has no
+			// end of input to pass on: the client's end of file changes nothing, as with sshd.
+			_, _ = io.Copy(master, stdin)
+		}()
+		return proc, master, nil, nil
+	}
 	// The process has its ends of the pipes; Cave keeps the others.
-	_ = inR.Close()
-	_ = outW.Close()
-	_ = errW.Close()
+	inW, outR, errR := files[1], files[2], files[4]
+	_ = files[0].Close()
+	_ = files[3].Close()
+	_ = files[5].Close()
 	go func() {
 		_, _ = io.Copy(inW, stdin) // ends when the client ends its side, or the process stops reading
 		_ = inW.Close()            // the process sees the end of its input
 	}()
-	return &process{cmd: cmd, exited: make(chan struct{})}, outR, errR, nil
+	return proc, outR, errR, nil
 }

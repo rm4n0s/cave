@@ -23,10 +23,14 @@ var signalNames = map[syscall.Signal]string{
 }
 
 // newCommand returns the command of a session: the shell as a login shell, or the shell running
-// the command with -c. The process leads a process group of its own, so that signals reach
-// everything it started and nothing else.
-func newCommand(shell, command string, login bool) (*exec.Cmd, error) {
+// the command with -c. Without a terminal, the process leads a process group of its own, so that
+// signals reach everything it started and nothing else. With one, it leads a new session whose
+// controlling terminal is its standard input.
+func newCommand(shell, command string, login, tty bool) (*exec.Cmd, error) {
 	cmd := &exec.Cmd{Path: shell, SysProcAttr: &syscall.SysProcAttr{Setpgid: true}}
+	if tty {
+		cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Setctty: true, Ctty: 0}
+	}
 	if login {
 		cmd.Args = []string{loginArgv0(shell)}
 	} else {

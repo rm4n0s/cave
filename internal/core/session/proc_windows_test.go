@@ -7,6 +7,6 @@ import (
 )
 
 func TestSessionsAreNotBuiltForWindowsYet(t *testing.T) {
-	_, err := newCommand(`C:\Windows\System32\cmd.exe`, "ver", false)
+	_, err := newCommand(`C:\Windows\System32\cmd.exe`, "ver", false, false)
 	errtest.Route(t, err, "newCommand.SessionUnsupported")
 }

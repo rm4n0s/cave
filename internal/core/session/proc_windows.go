@@ -12,7 +12,7 @@ const rootDir = `C:\`
 // newCommand returns the command of a session.
 //
 // TODO(step 7.1): sessions on Windows (docs/SPEC.md §13.2).
-func newCommand(string, string, bool) (*exec.Cmd, error) {
+func newCommand(string, string, bool, bool) (*exec.Cmd, error) {
 	return nil, errors.New(TagSessionUnsupported, "sessions are not built for Windows yet")
 }
 

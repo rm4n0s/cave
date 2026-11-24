@@ -288,8 +288,8 @@ Only one of `shell`, `exec`, `subsystem` succeeds per channel. Rules:
 
 - The process starts in the home folder (else `/`).
 - **Without a PTY**: standard input, output and error are pipes; error goes to the channel's extended data. When the client closes its side, standard input is closed.
-- **With a PTY**: the three are the PTY, and the process is the leader of a new session with the PTY as controlling terminal.
-- When the process ends, Cave sends what is left of its output (waiting at most 2 seconds for descendants that still hold the pipes), then `exit-status`, or `exit-signal` when a signal killed it, and closes the channel.
+- **With a PTY**: the three are the PTY, and the process is the leader of a new session with the PTY as controlling terminal. There is one output stream (nothing goes to the extended data). A terminal has no end of input: when the client closes its side, nothing changes, as with `sshd`.
+- When the process ends, Cave sends what is left of its output (waiting at most 2 seconds for descendants that still hold the pipes or the PTY), then `exit-status`, or `exit-signal` when a signal killed it, and closes the channel.
 - When the channel or the connection ends first: with a PTY, the PTY is closed (the kernel sends `SIGHUP`); without one, the process's group gets `SIGHUP` once. Cave never sends `SIGKILL`: a job started with `nohup` survives, as with `sshd`.
 - A process that cannot start (`SessionStartFailed`) is reported to the client on the channel's error stream with exit status 255, and logged. The request itself is granted, as with `sshd`, whose child fails after the request was answered.
 - A signal that killed the process and has no name in the protocol is reported as the exit status a shell gives it: 128 plus its number.
@@ -321,6 +321,10 @@ The shell is `session.shell` when set; else the user's shell in `/etc/passwd`; e
 
 - Linux: `/dev/ptmx`, unlocked and named with `ioctl` (`TIOCSPTLCK`, `TIOCGPTN`), opened without cgo. The size comes from `pty-req` and `window-change` (`TIOCSWINSZ`; columns and rows from 1 to 4096, else the request is refused).
 - The encoded terminal modes of `pty-req` (RFC 4254 §8) are applied to the PTY for the opcodes Linux has; unknown opcodes are skipped, and a malformed list fails the request (`PtyModesInvalid`).
+- `pty-req` is granted once per channel, and only before the process starts. Its terminal type becomes `TERM`: it must be printable ASCII without spaces, of at most 128 characters, else the request is refused (it is the client's own text and ends up in the environment); an empty type sets no `TERM`. A refused `pty-req` leaves the channel usable without a PTY. A refusal for the size, the modes or the system's error is logged with its error.
+- `window-change` without a PTY, or with a size out of range, is refused and changes nothing.
+- A PTY that was granted and never used, and every PTY of a session that ended, is closed: Cave leaves no PTY open.
+- The master side stays in the runtime's poller (its descriptor is used through `SyscallConn`, never `File.Fd`), so that closing it ends a read that is waiting for a process that still holds the PTY.
 - Windows: ConPTY (§13.3).
 
 ### 9.7 SFTP
