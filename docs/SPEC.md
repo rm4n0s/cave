@@ -47,7 +47,8 @@ cmd/tcave ► internal/tui ┘
 |---|---|
 | `cmd/cave` | `main` of the desktop app: flags, then `gui.Run` |
 | `cmd/tcave` | `main` of the TUI: flags, then `tui.Run` |
-| `internal/app` | The application: owns the stores and the server, gives snapshots, commands and events (§10). Also `version.go` and the flags both programs share |
+| `internal/app` | The application: owns the stores and the server, gives snapshots, commands and events (§10). Also `version.go`, the flags both programs share, and the words both UIs show |
+| `internal/app/apptest` | Test support for the UIs: a fake application with fixed content (for golden files) and a real one in a temporary folder (§14.3) |
 | `internal/core/storage` | Folders, atomic writes, the instance lock (§5). `storage/storagetest` isolates tests |
 | `internal/core/clock` | `Clock` (now, timers) and a fake for tests |
 | `internal/core/sanitize` | `Display`: makes hostile text safe to store, log and draw (§8.3) |
@@ -392,14 +393,15 @@ Every `server.keepAliveSeconds`, Cave looks at what arrived from each connection
 `app.Open(ctx, Options) (*App, error)` takes the lock, opens the log, loads settings, people, attempts and the host key, applies `attempts.clear` (`onStart`, or an overdue period), and starts the server when `server.startOnLaunch` (and not `--no-start`). `(*App).Close(ctx)` stops the server, saves, releases the lock.
 
 - **Snapshots** (plain values, safe to keep): `Server()` (state, listening addresses, error, host key fingerprint, the addresses of this computer with a ready `ssh -p <port> <name>@<address>` line), `People()`, `Attempts()` (entries, last cleared, next clear), `Connections()`, `Settings()`.
-- **Commands**: `StartServer`, `StopServer`; `AddPerson`, `RenamePerson`, `SetPersonEnabled`, `RemovePerson`, `AddKeys` (text), `ImportKeys` (file), `SetKeyComment`, `RemoveKey`; `ClearAttempts`, `RemoveAttempt`; `Disconnect`; `Set` (one setting); `NewHostKey`. Each returns an `error` with a Tag the UIs turn into a sentence.
+- **Commands**: `StartServer`, `StopServer`; `AddPerson`, `RenamePerson`, `SetPersonEnabled`, `RemovePerson`, `AddKeys` (text), `ImportKeys` (file), `SetKeyComment`, `RemoveKey`; `ClearAttempts`, `RemoveAttempt`; `Disconnect`, `DisconnectAll`; `Set` (one setting); `NewHostKey`. Each returns an `error` with a Tag the UIs turn into a sentence (`DisconnectAll` cannot fail and returns nothing).
 - **Events**: `Subscribe(func(Event)) (cancel func())`. `Changed{Topics}` (a set of `Server`, `People`, `Attempts`, `Connections`, `Settings`), coalesced to at most one every 100 ms; `Accepted{person, address}` and `Rejected{entry}` for notifications.
-- `app.Messages` turns an error Tag into the sentence shown to the user (one table for both UIs); an unknown Tag shows the error's own message.
+- `app.Message(err)` turns an error into the sentence shown to the user (one table of sentences by Tag for both UIs, filled in from the error's metadata, every value made safe with `sanitize.Display`); an unknown Tag shows the error's own message.
+- **Words** both UIs show are written once here: the wording of an attempt's result (§11.3), relative times ("3 min ago", "in 4 d"), what a connection has open, the question before quitting (§11.6), and each setting's group, label and one-line explanation (§11.5).
 - **Opening.** Root is refused before anything is touched (§9.1). A failure after that (the lock is held: `AlreadyRunning`; a file that does not parse; a folder that cannot be made) is returned with everything released: no lock, no listener. A server that cannot start is not such a failure: the application opens with the server stopped and the reason in the `Server()` snapshot, so that the user can choose another port.
 - **`Server()`**: `Err` is why the server is not running although it was asked to (a failed start, or a failed move of the listener), and is cleared by a start that works and by `StopServer`. `Port` is the listener's port, or the one it would use. `Addresses` is the one address of `server.address` when that is set, else this computer's addresses (`netinfo`: those of the interfaces that are up, IPv4 before IPv6, loopback last, link-local IPv6 left out). `Command(person, address)` is the line to give a person; the port 22 is not written.
 - **`Set`** saves the setting and does what the change asks for at once. When the effect fails (a port that cannot be listened on), the setting stays saved, the failure is returned and `Server()` keeps it.
 - **`Changed`** is sent 100 ms after the first change the subscribers have not been told of, with every topic that changed meanwhile; nothing is sent after `Close`.
-- **Flags** (`app.Flags`, the same for both programs): `--config-dir`, `--state-dir`, `--port`, `--no-start`, `--allow-root`, `--log-level`, `--version`, and `--help`, which prints them.
+- **Flags** (`app.Flags`, the same for both programs): `--config-dir`, `--state-dir`, `--port`, `--no-start`, `--allow-root`, `--log-level`, `--version`, `--page <name>` (the page shown first: `overview`, `people`, `attempts`, `connections` or `settings`; another name is `FlagsPageInvalid`), and `--help`, which prints them.
 
 ## 11. The desktop app (`cave`)
 
