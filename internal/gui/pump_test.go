@@ -2,6 +2,7 @@ package gui
 
 import (
 	"context"
+	"github.com/rm4n0s/cave/internal/app/apptest"
 	"golang.org/x/crypto/ssh"
 	"testing"
 	"time"
@@ -33,8 +34,19 @@ func pump(t *testing.T, a App, size ui.Size, page string) *gluttertest.Tester {
 // pumpWith is pump with a runner of the test's own, for a test that holds a command back.
 func pumpWith(t *testing.T, a App, size ui.Size, page string, run runner) *gluttertest.Tester {
 	t.Helper()
+	opts := Options{Page: page, Version: "0.0.0-test"}
+	if f, ok := a.(*apptest.Fake); ok {
+		opts.Clock = f.Clock
+	}
+	return pumpOptions(t, a, size, opts, run)
+}
+
+// pumpOptions is pumpWith with the options of the test's own, the clock among them: a test of the
+// real application gives the application's fake clock.
+func pumpOptions(t *testing.T, a App, size ui.Size, opts Options, run runner) *gluttertest.Tester {
+	t.Helper()
 	tester := testutil.NewTester(t, size)
-	tester.PumpWidget(newRoot(context.Background(), a, Options{Page: page, Version: "0.0.0-test"}, run))
+	tester.PumpWidget(newRoot(context.Background(), a, opts, run))
 	tester.PumpAndSettle()
 	return tester
 }

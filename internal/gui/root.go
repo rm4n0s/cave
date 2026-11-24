@@ -3,8 +3,10 @@ package gui
 import (
 	"context"
 	"slices"
+	"time"
 
 	"github.com/rm4n0s/cave/internal/app"
+	"github.com/rm4n0s/cave/internal/core/clock"
 	m "github.com/rm4n0s/glutter/material"
 )
 
@@ -34,7 +36,13 @@ type rootState struct {
 	cancel   func()
 	endWork  context.CancelFunc
 	disposed bool
+	clock    clock.Clock
+	timer    clock.Timer
+	post     func(func())
 }
+
+// tickEvery is how often the relative times are drawn again.
+const tickEvery = 30 * time.Second
 
 // InitState reads the snapshots, makes the runner and subscribes to the application.
 func (s *rootState) InitState() {
@@ -47,8 +55,14 @@ func (s *rootState) InitState() {
 		run = newRunner(ctx, binding.Post)
 	}
 	page := max(slices.Index(app.Pages, w.opts.Page), 0)
-	s.v = (&view{app: w.a, run: run, page: page, selectPage: s.selectPage, opts: w.opts}).
+	s.clock = w.opts.Clock
+	if s.clock == nil {
+		s.clock = clock.System()
+	}
+	s.post = binding.Post
+	s.v = (&view{app: w.a, run: run, now: s.clock.Now(), page: page, selectPage: s.selectPage, opts: w.opts}).
 		with(app.TopicServer | app.TopicPeople | app.TopicAttempts | app.TopicConnections | app.TopicSettings)
+	s.timer = s.clock.AfterFunc(tickEvery, s.tick)
 	// The application tells its changes on its own goroutines: the work is handed to the UI thread.
 	s.cancel = w.a.Subscribe(func(event app.Event) {
 		changed, ok := event.(app.Changed)
@@ -62,8 +76,25 @@ func (s *rootState) InitState() {
 // Dispose cancels the subscription and the commands that are still running.
 func (s *rootState) Dispose() {
 	s.disposed = true
+	s.timer.Stop()
 	s.cancel()
 	s.endWork()
+}
+
+// tick moves the time of the view on, so that "3 min ago" is drawn again, and arms the next tick.
+// It runs on the timer's goroutine and hands the work to the UI thread.
+func (s *rootState) tick() {
+	s.post(func() {
+		if s.disposed {
+			return
+		}
+		s.SetState(func() {
+			c := *s.v
+			c.now = s.clock.Now()
+			s.v = &c
+		})
+		s.timer.Reset(tickEvery)
+	})
 }
 
 // refresh reads the snapshots of the topics again. It runs on the UI thread.
@@ -71,7 +102,10 @@ func (s *rootState) refresh(topics app.Topics) {
 	if s.disposed {
 		return
 	}
-	s.SetState(func() { s.v = s.v.with(topics) })
+	s.SetState(func() {
+		s.v = s.v.with(topics)
+		s.v.now = s.clock.Now()
+	})
 }
 
 // selectPage shows the page with the index in app.Pages.

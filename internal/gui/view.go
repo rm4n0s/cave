@@ -1,6 +1,8 @@
 package gui
 
 import (
+	"time"
+
 	"github.com/rm4n0s/cave/internal/app"
 	"github.com/rm4n0s/cave/internal/core/people"
 	"github.com/rm4n0s/cave/internal/core/server"
@@ -19,6 +21,8 @@ type view struct {
 	attempts    app.AttemptsSnapshot
 	connections []server.Connection
 	settings    settings.Snapshot
+	// now is the time the relative times are counted from; the root moves it on every tick.
+	now time.Time
 	// page is the index in app.Pages of the page that is shown.
 	page int
 	// selectPage shows another page (the index in app.Pages).

@@ -3,6 +3,7 @@ package gui
 import (
 	"context"
 
+	"github.com/rm4n0s/cave/internal/core/clock"
 	"github.com/rm4n0s/errors"
 	m "github.com/rm4n0s/glutter/material"
 	"github.com/rm4n0s/glutter/ui"
@@ -19,6 +20,9 @@ type Options struct {
 	ConfigDir, StateDir string
 	// Version is the version of Cave, shown on the Settings page.
 	Version string
+	// Clock is the clock of the relative times ("3 min ago") and of the tick that draws them
+	// again; nil is the system's.
+	Clock clock.Clock
 }
 
 // Run shows the window until the user closes it or ctx is cancelled (which is not an error). The
