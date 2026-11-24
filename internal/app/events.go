@@ -23,7 +23,8 @@ func (t Topics) Has(other Topics) bool {
 	return t&other == other
 }
 
-// Event is something the application tells its subscribers: a Changed.
+// Event is something the application tells its subscribers: a Changed, an Accepted or a
+// Rejected.
 type Event interface {
 	// event marks the types that are events.
 	event()

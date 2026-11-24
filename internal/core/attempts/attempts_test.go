@@ -754,3 +754,67 @@ func TestConcurrentUse(t *testing.T) {
 		t.Errorf("the file has %d entries, want %d", f.Len(), writers*10)
 	}
 }
+
+func TestSubscribeRecords(t *testing.T) {
+	f := newFixture(t)
+	var first, second []Entry
+	cancelFirst := f.SubscribeRecords(func(e Entry) { first = append(first, e) })
+	f.SubscribeRecords(func(e Entry) { second = append(second, e) })
+
+	// Every attempt is told, with the entry as it is after the count.
+	attempt := Attempt{Outcome: UnknownName, LoginName: "mallory", Address: "192.0.2.1"}
+	f.Record(attempt)
+	f.Record(attempt)
+	f.Record(Attempt{Outcome: Accepted, PersonID: "p_1", PersonName: "alice", Address: "192.0.2.2"})
+	if len(first) != 3 || len(second) != 3 {
+		t.Fatalf("the listeners were told %d and %d times, want 3 and 3", len(first), len(second))
+	}
+	if first[0].Count != 1 || first[1].Count != 2 || first[0].ID != first[1].ID {
+		t.Errorf("the same group counted: %+v then %+v", first[0], first[1])
+	}
+	if first[2].Outcome != Accepted || first[2].PersonName != "alice" {
+		t.Errorf("the third entry is %+v", first[2])
+	}
+
+	// What a listener is given is its own copy.
+	first[0].Keys = append(first[0].Keys, "changed")
+	for _, e := range f.Entries() {
+		for _, key := range e.Keys {
+			if key == "changed" {
+				t.Error("a listener changed the list through the entry it was given")
+			}
+		}
+	}
+
+	// After cancel the listener is not told; twice is fine; the other one still is.
+	cancelFirst()
+	cancelFirst()
+	f.Record(attempt)
+	if len(first) != 3 || len(second) != 4 {
+		t.Errorf("after cancel the listeners were told %d and %d times, want 3 and 4", len(first), len(second))
+	}
+}
+
+func TestSubscribeRecordsListenerMayCancelItself(t *testing.T) {
+	f := newFixture(t)
+	calls := 0
+	var cancel func()
+	cancel = f.SubscribeRecords(func(Entry) {
+		calls++
+		cancel()
+	})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		f.Record(Attempt{Outcome: NoKey, Address: "192.0.2.1"})
+		f.Record(Attempt{Outcome: NoKey, Address: "192.0.2.1"})
+	}()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Record is stuck: a listener that cancels itself deadlocks it")
+	}
+	if calls != 1 {
+		t.Errorf("the listener was told %d times, want once", calls)
+	}
+}

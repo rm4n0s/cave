@@ -216,7 +216,9 @@ type List struct {
 
 	listenersMu sync.Mutex
 	listeners   []subscription
-	nextID      int
+	// recordListeners are told every attempt that is recorded.
+	recordListeners []recordSubscription
+	nextID          int
 }
 
 // subscription is one listener of a List.
@@ -386,7 +388,41 @@ func (l *List) Record(a Attempt) Entry {
 	l.changed()
 	l.mu.Unlock()
 	l.notify()
+	l.listenersMu.Lock()
+	recordListeners := l.recordListeners
+	l.listenersMu.Unlock()
+	for _, sub := range recordListeners {
+		sub.fn(out.clone())
+	}
 	return out
+}
+
+// recordSubscription is one listener of the attempts that are recorded.
+type recordSubscription struct {
+	id int
+	fn func(Entry)
+}
+
+// SubscribeRecords registers a function that is called for every attempt that is recorded, with
+// the entry it was counted into as it is now, on the goroutine that recorded it. The returned
+// function ends the subscription.
+func (l *List) SubscribeRecords(listener func(Entry)) (cancel func()) {
+	l.listenersMu.Lock()
+	defer l.listenersMu.Unlock()
+	id := l.nextID
+	l.nextID++
+	l.recordListeners = append(l.recordListeners, recordSubscription{id: id, fn: listener})
+	return func() {
+		l.listenersMu.Lock()
+		defer l.listenersMu.Unlock()
+		for i, sub := range l.recordListeners {
+			if sub.id == id {
+				// A new slice, so that a call that is under way keeps its own list.
+				l.recordListeners = append(append([]recordSubscription(nil), l.recordListeners[:i]...), l.recordListeners[i+1:]...)
+				return
+			}
+		}
+	}
 }
 
 // Entries returns the entries, the one with the newest last attempt first. The result is the

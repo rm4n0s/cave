@@ -88,6 +88,8 @@ type App struct {
 	logCloser io.Closer
 	// unsubscribe ends the watches of the stores and the server.
 	unsubscribe []func()
+	// notifier makes the Accepted and Rejected events.
+	notifier *notifier
 
 	// serverMu makes the commands that start, stop and move the server take turns.
 	serverMu sync.Mutex
@@ -204,6 +206,7 @@ func (a *App) open(ctx context.Context) error {
 			}
 		}),
 	}
+	a.startNotifier()
 	a.mu.Lock()
 	a.armPolicyCheck()
 	a.mu.Unlock()
@@ -262,6 +265,7 @@ func (a *App) Close(ctx context.Context) error {
 	}
 	a.listeners = nil
 	a.mu.Unlock()
+	a.stopNotifier()
 
 	a.serverMu.Lock()
 	first := a.server.Stop(ctx)

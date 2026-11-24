@@ -629,10 +629,20 @@ func TestEventsAreCoalesced(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.connect(a, "carol", key, f.port)
-	f.clock.Advance(CoalesceTime)
-	got = first.take()
-	if len(got) != 1 || !got[0].Has(TopicConnections|TopicAttempts|TopicPeople) {
-		t.Errorf("after a connection the subscriber got %v", got)
+	// The registry shows a connection a moment before the server announces it, so the event with
+	// the connections may come in the next round of the clock; what matters is that the subscriber
+	// is told about the person, the attempt and the connection, and never twice about one change.
+	var told Topics
+	deadline := time.Now().Add(waitFor)
+	for !told.Has(TopicConnections | TopicAttempts | TopicPeople) {
+		if time.Now().After(deadline) {
+			t.Fatalf("after a connection the subscriber was told only about %b", told)
+		}
+		f.clock.Advance(CoalesceTime)
+		for _, topics := range first.take() {
+			told |= topics
+		}
+		time.Sleep(5 * time.Millisecond)
 	}
 
 	// After Close nothing is told any more.

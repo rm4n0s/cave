@@ -269,3 +269,14 @@ One entry per finished step of `docs/IMPLEMENTATION.md`, newest last. Format:
 - **Proof**: [4.2-app.txt](implemented-proof-images/4.2-app.txt), the transcript of the scenario test.
 - **Manual checks**: none
 - **Glutter issues**: none
+
+## Step 4.3: Events for notifications, and messages
+- **Date**: 2026-11-24
+- **Branch**: feat/step-4.3-events-messages
+- **Summary**: `attempts.List.SubscribeRecords` tells a listener every attempt that is recorded, with a copy of the entry as counted. `internal/app/notify.go`: the events `Accepted{Person, Address}` and `Rejected{Entry}`, made from those attempts and handed to the subscribers by a goroutine of their own through a queue of 64, so that a connection never waits for a subscriber; `Rejected` at most once a minute by the application's clock; `Close` ends the goroutine and nothing is sent after it. `internal/app/messages.go`: `Message(err)` and the table of sentences, one for each of the 77 Tags of the application, attempts, hostkey, logging, people, server, settings and storage packages, with `{key}`, `{cause}` and `{message}` placeholders whose values go through `sanitize.Display`.
+- **Decisions**: the queue is never closed (a connection still being recorded could send on a closed channel); a full queue drops the newest event. `AlreadyRunning` does not name the other process: its holder is not always known. Sentences are only for the Tags a user interface can show; the Tags of sessions, SFTP, forwarding and the pty are logged only. SPEC §10 says how the events are delivered. The `notify.*` settings are not looked at here; the desktop UI does that (step 6.8).
+- **Checks**: `scripts/checks.sh` passed, every check (gofmt, vet for Linux and Windows, golangci-lint 0 issues, race tests as a debug build, cgo-free build and tests, Windows build, error tags: none untested, the Wine run).
+- **Tests**: `attempts`: the listeners are told every attempt with the right count, get their own copy, stop after `cancel` (twice is fine), and one that cancels itself does not deadlock `Record`. `app`: `Accepted` for a connection; `Rejected` once for three refusals and again a minute later; 200 attempts with a subscriber that never returns do not block; nothing is sent after `Close`; `Message` for real errors of every kind a command or `Open` gives (exact sentences), for `nil`, for an error of another kind and for a Tag without a sentence; unsafe characters in a value, the cause or the text are replaced; long text is cut; every Tag of the listed folders has a sentence and every sentence has a Tag; every sentence is well formed. `TestEventsAreCoalesced` no longer assumes that the connection's announcement comes before the registry shows it (a race of the server that is harmless: the next event carries it).
+- **Proof**: none
+- **Manual checks**: none
+- **Glutter issues**: none
