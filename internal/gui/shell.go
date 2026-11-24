@@ -107,6 +107,8 @@ func pageFor(v *view) m.Widget {
 	switch v.page {
 	case pageOverview:
 		return newOverviewPage(v)
+	case pagePeople:
+		return newPeoplePage(v)
 	}
 	return newHeadline(destinations[v.page].label)
 }

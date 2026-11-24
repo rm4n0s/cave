@@ -3,7 +3,9 @@ package gui
 import (
 	"context"
 	"testing"
+	"time"
 
+	"github.com/rm4n0s/glutter/foundation"
 	"github.com/rm4n0s/glutter/gluttertest"
 	m "github.com/rm4n0s/glutter/material"
 	"github.com/rm4n0s/glutter/ui"
@@ -43,4 +45,29 @@ func currentPage(t *testing.T, tester *gluttertest.Tester) int {
 		return gluttertest.WidgetAs[*m.NavigationRail](tester, gluttertest.ByType[*m.NavigationRail]()).SelectedIndex().Value()
 	}
 	return gluttertest.WidgetAs[*m.NavigationBar](tester, gluttertest.ByType[*m.NavigationBar]()).SelectedIndex()
+}
+
+// eventually pumps the tester until cond is true, for up to five seconds of real time. Work that
+// a page hands to another goroutine (the answer of a dialog) and what the application tells on
+// its own goroutines come back to the UI thread through the tester's posted functions.
+func eventually(t *testing.T, tester *gluttertest.Tester, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		tester.FlushPosted()
+		tester.PumpAndSettle()
+		if cond() {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("after 5 seconds: %s", what)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+}
+
+// tapKey taps the widget with the key and lets the tree settle.
+func tapKey(tester *gluttertest.Tester, key foundation.Key) {
+	tester.Tap(gluttertest.ByKey(key))
+	tester.PumpAndSettle()
 }
