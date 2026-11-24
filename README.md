@@ -2,7 +2,7 @@
 
 Cave is an SSH server that you start, watch and stop yourself. It does the job of `sshd`, but it is an ordinary program: it needs no root, and every person who connects gets a session that runs as **you**. You open it, add the people you trust and the public keys they connect with, and see who tried to connect and how many times. When you are done, you close it.
 
-It is for people who want to give a friend, a colleague or their own other computer a shell or a file transfer for a while, without setting up a system service. It runs on Linux and on Windows 10 (version 1809) or newer.
+It is for people who want to give a friend, a colleague or their own other computer a shell or a file transfer for a while, without setting up a system service. It runs on Linux, on macOS 14 or newer, and on Windows 10 (version 1809) or newer.
 
 There are two programs, with the same features:
 
@@ -22,7 +22,7 @@ go install github.com/rm4n0s/cave/cmd/cave@latest
 go install github.com/rm4n0s/cave/cmd/tcave@latest
 ```
 
-Or take the files of a release, if the author published them: an archive for Linux or Windows with both programs. Cave needs no installation beyond that, and no C compiler.
+Or take the files of a release, if the author published them: an archive for Linux, macOS or Windows with both programs (on macOS, see [the guide](docs/GUIDE.md#macos) for the first start of a downloaded program). Cave needs no installation beyond that, and no C compiler.
 
 ## First use
 
@@ -39,7 +39,7 @@ Or take the files of a release, if the author published them: an archive for Lin
 - A connected person may also copy files (SFTP), forward ports, and forward their SSH agent. You can turn each of these off in Settings.
 - Cave does not run as root unless you tell it to, and it is not a replacement for a firewall.
 
-Read [docs/SECURITY.md](docs/SECURITY.md) for what Cave does and does not protect, and [docs/GUIDE.md](docs/GUIDE.md) for everything else: people and keys, the settings, the files Cave keeps, the command line, Windows, and what to do when something goes wrong.
+Read [docs/SECURITY.md](docs/SECURITY.md) for what Cave does and does not protect, and [docs/GUIDE.md](docs/GUIDE.md) for everything else: people and keys, the settings, the files Cave keeps, the command line, macOS, Windows, and what to do when something goes wrong.
 
 ## License
 

@@ -13,6 +13,7 @@ Everything here is true of both programs, `cave` (the desktop application) and `
 - [Settings](#settings)
 - [Files and folders](#files-and-folders)
 - [The command line](#the-command-line)
+- [macOS](#macos)
 - [Windows](#windows)
 - [Troubleshooting](#troubleshooting)
 
@@ -114,10 +115,10 @@ Settings can also be changed by editing `settings.json` while Cave is closed. A 
 
 ## Files and folders
 
-| | Linux | Windows |
-|---|---|---|
-| Configuration | `$XDG_CONFIG_HOME/cave`, else `~/.config/cave` | `%AppData%\Cave` |
-| State | `$XDG_STATE_HOME/cave`, else `~/.local/state/cave` | `%LocalAppData%\Cave` |
+| | Linux | macOS | Windows |
+|---|---|---|---|
+| Configuration | `$XDG_CONFIG_HOME/cave`, else `~/.config/cave` | `~/Library/Application Support/Cave` | `%AppData%\Cave` |
+| State | `$XDG_STATE_HOME/cave`, else `~/.local/state/cave` | `~/Library/Application Support/Cave/State` | `%LocalAppData%\Cave` |
 
 The configuration folder holds `settings.json`, `people.json` (the people and their keys), and the host key, `ssh_host_ed25519_key` and its `.pub`. The state folder holds `attempts.json` (the attempts list), `cave.log` and `cave.log.1` (the log), and `lock`.
 
@@ -144,6 +145,19 @@ Both programs take the same flags. A flag is for one run and is never saved.
 | `--help` | Print the flags and the default folders, and exit. |
 
 Folders given to Cave must be absolute paths. To try Cave without touching your own, run it on empty folders: `cave --config-dir /tmp/cave-try/config --state-dir /tmp/cave-try/state`.
+
+## macOS
+
+Cave works on macOS 14 or newer, on Apple silicon and on Intel Macs, the same way as on Linux, with these differences:
+
+- The folders are those in the table above, under `~/Library/Application Support`. A forwarded agent's socket is in a private folder under your temporary folder.
+- The default shell is the one of your account (System Settings, Users & Groups, or `dscl . -read /Users/$USER UserShell`), usually `zsh`, unless `session.shell` says another.
+- A terminal session gets a terminal such as `/dev/ttys004`.
+- `cave` is a plain program, not an app bundle: start it from the Terminal.
+- A program downloaded with a browser is marked as coming from the internet, and macOS refuses to open a program that no known developer signed. After you unpack a release, remove the mark once: `xattr -d com.apple.quarantine cave tcave`. Programs you build with `go install` have no mark.
+- macOS protects some folders (Desktop, Documents, Downloads, other volumes) even from your own programs. A session runs inside Cave, or inside the Terminal that runs `tcave`, so macOS may ask whether that program may open those folders, or a command in a session may get "Operation not permitted". Allow it in System Settings, Privacy & Security, Files and Folders.
+- If the macOS firewall is on, it asks whether to accept incoming connections for Cave the first time it listens. Allow it only if you want people on the network to reach you.
+- macOS's own SSH server (Remote Login, port 22) has nothing to do with Cave; Cave listens on its own port (2222 by default).
 
 ## Windows
 

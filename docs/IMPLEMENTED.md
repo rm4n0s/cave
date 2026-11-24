@@ -589,5 +589,16 @@ One entry per finished step of `docs/IMPLEMENTATION.md`, newest last. Format:
 - **Manual checks**: none
 - **Glutter issues**: none
 
+## Step 9.3: The manual for macOS
+- **Date**: 2026-11-25
+- **Branch**: feat/step-9.3
+- **Summary**: the README names macOS 14 or later among the systems and the macOS archives among the files of a release. The guide has a macOS column in the table of folders and a section "macOS": the folders, the shell (the account's, from the directory service; zsh by default), the terminal (`/dev/ttysNNN`), that `cave` is a plain program started from Terminal and not an app bundle, how to take the quarantine off a downloaded program (`xattr -d com.apple.quarantine cave tcave`), that macOS asks before a session reads a protected folder (Desktop, Documents, Downloads) and the firewall before Cave listens, and that Remote Login is a different server, not needed for Cave, which listens on 2222. docs/MANUAL-CHECKS.md has a check for the Mac: the menu bar icon and its menu, close to the tray, the notification of a connection, and an interactive terminal session with `vim` or `top` that follows a resized window.
+- **Decisions**: none new.
+- **Checks**: `scripts/checks.sh --no-wine` passed, every check, on the Mac (see step 9.1).
+- **Tests**: none new (`TestTheReadmeLinksExist` checks the new link to the guide's macOS section; `TestUsageNamesTheFoldersOfThePlatform` the macOS folders of the usage, which the guide repeats).
+- **Proof**: none
+- **Manual checks**: pending, see docs/MANUAL-CHECKS.md (step 9.3).
+- **Glutter issues**: none
+
 ### The plan is finished
-Every step of `docs/IMPLEMENTATION.md` is implemented (M0 to M8). The milestones are published as `v0.1.0` to `v0.9.0`. What is left for the author: the items of `docs/MANUAL-CHECKS.md` (the tray and the notifications on a desktop, a terminal session, agent forwarding and the programs on a Windows PC, the icon on a desktop and on Windows), publishing the files of a release (`scripts/build-release.sh` makes them and uploads nothing), and the decision on `v1.0.0`. `docs/GLUTTER-ISSUES.md` has no entry: no workaround of Glutter was needed.
+Every step of `docs/IMPLEMENTATION.md` is implemented (M0 to M9). The milestones are published as `v0.1.0` to `v0.10.0`. What is left for the author: the items of `docs/MANUAL-CHECKS.md` (the tray and the notifications on a desktop, a terminal session, agent forwarding and the programs on a Windows PC, the desktop app and a terminal session on a Mac, the icon on a desktop and on Windows), publishing the files of a release (`scripts/build-release.sh` makes them and uploads nothing), and the decision on `v1.0.0`. `docs/GLUTTER-ISSUES.md` has no entry: no workaround of Glutter was needed.

@@ -55,3 +55,19 @@ Build the files with `scripts/heavy.sh -- scripts/build-windows.sh` and copy `di
 ## Step 8.2: the icon and the desktop entry
 
 On a Linux desktop: copy `packaging/cave.desktop` to `~/.local/share/applications/` and the icons to `~/.local/share/icons/hicolor/<size>x<size>/apps/io.github.rm4n0s.cave.png` (from `packaging/icons/cave-<size>.png`), then start `cave` from the application menu. Does the menu show the Cave icon? Does the window and the task bar show it? Is the tray icon (a green dot while the server runs, none when it does not) clear at the size of your panel? On Windows, does `cave.exe` show the icon in its file properties, the task bar and the tray?
+
+## Step 9.3: the desktop app and a terminal session on a Mac
+
+On the Mac, in Terminal (the fixture listens on loopback only, on a port the system chooses):
+
+```
+port=$(go run scripts/freeport.go); echo $port; scripts/isolated.sh --config scripts/testdata/two-people -- go run -tags debug_mode ./cmd/cave --port $port
+```
+
+Is there an icon in the menu bar, and does its menu work (`Show Cave`, `Stop server` or `Start server`, `Quit`)? Does the close button hide the window when `Close to the tray` is on in Settings? Start the server, and in another Terminal window, with the port it printed:
+
+```
+CAVE_PROOF_PORT=<port> CAVE_PROOF_FIXTURE=scripts/testdata/two-people scripts/proof-ssh.sh alice alice -t
+```
+
+Does a notification appear (`alice connected`)? In the shell you get, does `vim` (or `top`) fill the window, and follow it when you resize the window? Does `exit` end the connection?
