@@ -104,3 +104,14 @@ One entry per finished step of `docs/IMPLEMENTATION.md`, newest last. Format:
 - **Proof**: none
 - **Manual checks**: none
 - **Glutter issues**: none
+
+## Step 1.4: The host key
+- **Date**: 2026-11-24
+- **Branch**: feat/step-1.4-hostkey
+- **Summary**: `internal/core/hostkey`: `LoadOrCreate` reads `ssh_host_ed25519_key` (OpenSSH's private key format, mode `0600`) or makes it at the first start; `Create` replaces it; `Signer`, `Fingerprint` and `AuthorizedKey`. The `.pub` file is written beside it and repaired when missing or different. `devVersion` is `0.3.0-dev`: this is the last step of M1, published as `v0.2.0`.
+- **Decisions**: (SPEC §9.10 updated) a key file that cannot be read fails with the errors of `storage`; one that is not a private key is `HostKeyParseFailed`; a private key of another type is `HostKeyTypeUnsupported`. A new key is read back from the disk before it is used. `docs/ERROR-TAGS-UNTESTED.md` now exists with its first entry, `HostKeyEncodeFailed` (the encoding of a fresh Ed25519 key cannot fail).
+- **Checks**: `scripts/checks.sh` passed, every check (gofmt, vet for Linux and Windows, golangci-lint 0 issues, race tests as a debug build, cgo-free build and tests, Windows build, error tags: none untested, the Wine run).
+- **Tests**: created once and the same over three loads, without rewriting; the files' modes and contents; the key signs and verifies; `Create` replaces; the public file repaired; six broken or foreign key files refused, left untouched and given no public file; no randomness; folders gone; cancelled contexts. With OpenSSH 10.6 installed: `ssh-keygen -l` prints Cave's fingerprint for the public file, and `ssh-keygen -y` derives the same public key from the private file.
+- **Proof**: none
+- **Manual checks**: none
+- **Glutter issues**: none

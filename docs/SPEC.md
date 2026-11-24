@@ -346,7 +346,7 @@ Every `server.keepAliveSeconds`, Cave sends `keepalive@openssh.com` wanting a re
 - An Ed25519 key, made at the first start, saved in OpenSSH's private key format with mode `0600`, with its `.pub` beside it.
 - The UIs show its `SHA256:` fingerprint, so a client's first-connection question can be checked.
 - "New host key" replaces it (the UIs warn that every client will see a changed-host-key warning). It takes effect for new connections.
-- A host key file that cannot be read or parsed is an error (`HostKeyReadFailed`, `HostKeyParseFailed`); Cave never silently replaces it.
+- A host key file that cannot be read (the errors of `storage`), is not a private key (`HostKeyParseFailed`) or is a key of another type (`HostKeyTypeUnsupported`) is an error; Cave never silently replaces it. The `.pub` file is derived: when it is missing or differs, it is written again.
 
 ## 10. The application layer (`internal/app`)
 
