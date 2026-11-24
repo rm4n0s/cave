@@ -17,6 +17,8 @@ import (
 	"github.com/rm4n0s/cave/internal/core/pty"
 	"github.com/rm4n0s/cave/internal/core/server/servertest"
 	"github.com/rm4n0s/cave/internal/core/settings"
+	"github.com/rm4n0s/cave/internal/core/sftp"
+	"github.com/rm4n0s/cave/internal/core/sshtest"
 	"github.com/rm4n0s/cave/internal/core/wine"
 	"github.com/rm4n0s/errors"
 	"golang.org/x/crypto/ssh"
@@ -465,4 +467,32 @@ func TestClosingTheChannelEndsTheProcessOnATerminal(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+}
+
+func TestTheSftpSubsystemStartsOnWindows(t *testing.T) {
+	f := newWinFixture(t)
+	channel, requests, err := f.client.OpenChannel("session", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = channel.Close() })
+	go ssh.DiscardRequests(requests)
+	ok, err := channel.SendRequest("subsystem", true, ssh.Marshal(struct{ Name string }{"sftp"}))
+	if err != nil || !ok {
+		t.Fatalf("the sftp subsystem was refused (error %v)", err)
+	}
+	client := sshtest.NewSFTPClient(t, channel)
+	if version, _ := client.Init(); version != sftp.Version {
+		t.Errorf("the server speaks version %d, want %d", version, sftp.Version)
+	}
+	// The session starts in the home folder, in the form of SFTP.
+	reply := client.Call(sshtest.SFTPRealpath, ".")
+	if names := reply.Names(); len(names) != 1 || !strings.EqualFold(names[0].Name, fromSFTPHome(f.Home)) {
+		t.Errorf("realpath . = %+v, want the home %s", names, f.Home)
+	}
+}
+
+// fromSFTPHome is the home folder as an SFTP client sees it: "/C:/Users/ada".
+func fromSFTPHome(home string) string {
+	return "/" + strings.ReplaceAll(home, `\`, "/")
 }

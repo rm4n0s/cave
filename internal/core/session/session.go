@@ -60,7 +60,7 @@ type handler struct {
 	opts Options
 	// pipe makes a pipe; tests replace it to make it fail.
 	pipe func() (r, w *os.File, err error)
-	// sftp serves the sftp subsystem; nil where Cave has no file system for it yet.
+	// sftp serves the sftp subsystem; nil when the file system could not be made.
 	sftp *sftp.Server
 }
 

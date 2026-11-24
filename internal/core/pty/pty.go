@@ -1,5 +1,5 @@
 // Package pty makes pseudo terminals for sessions, without cgo: devpts on Linux, and ConPTY on
-// Windows from step 7.2. It also decodes the terminal modes a client sends with its pty-req
+// Windows. It also decodes the terminal modes a client sends with its pty-req
 // (RFC 4254 §8) and applies those the platform has (docs/SPEC.md §9.6).
 package pty
 

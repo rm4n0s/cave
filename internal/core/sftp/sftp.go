@@ -26,7 +26,6 @@ const (
 	TagInitInvalid     = "SftpInitInvalid"
 	TagInitRepeated    = "SftpInitRepeated"
 	TagRequestInvalid  = "SftpRequestInvalid"
-	TagUnsupported     = "SftpUnsupported"
 )
 
 // The limits of a session (docs/SPEC.md §9.7).
