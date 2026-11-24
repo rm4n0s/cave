@@ -98,10 +98,14 @@ func (m Model) keyPeople(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	ctx, a := m.ctx, m.app
 	switch name {
 	case "a":
+		// A person needs a key to connect, so there is no person without one: the name is
+		// asked first and checked, then the keys, and the person is added with both.
 		m.openPrompt("Name of the new person:", "", maxNameLength, func(id int, text string) tea.Cmd {
 			return func() tea.Msg {
-				p, err := a.AddPerson(ctx, text)
-				return promptDone{id: id, err: err, selectID: p.ID}
+				if err := a.CheckPersonName(text); err != nil {
+					return promptDone{id: id, err: err}
+				}
+				return promptDone{id: id, next: func(m Model) Model { return m.askKeysOfNewPerson(text) }}
 			}
 		})
 	case "e":
@@ -124,6 +128,20 @@ func (m Model) keyPeople(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.askRemovePerson()
 	}
 	return m, nil
+}
+
+// askKeysOfNewPerson opens the field for the public keys of the person who is being added, and
+// adds the person with them. The person is not added when the keys are not acceptable: the field
+// stays open with the sentence, and Esc leaves nobody added.
+func (m Model) askKeysOfNewPerson(name string) Model {
+	ctx, a := m.ctx, m.app
+	m.openArea("Paste the public keys of "+name+" (one per line), then press ctrl+d. esc cancels.", func(id int, text string) tea.Cmd {
+		return func() tea.Msg {
+			p, err := a.AddPerson(ctx, name, text)
+			return promptDone{id: id, err: err, selectID: p.ID}
+		}
+	})
+	return m
 }
 
 // togglePerson enables a person who is disabled, and disables one who is enabled: after asking

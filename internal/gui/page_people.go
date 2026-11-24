@@ -6,6 +6,7 @@ import (
 
 	"github.com/rm4n0s/cave/internal/app"
 	"github.com/rm4n0s/cave/internal/core/people"
+	"github.com/rm4n0s/errors"
 	"github.com/rm4n0s/glutter/foundation"
 	m "github.com/rm4n0s/glutter/material"
 )
@@ -184,30 +185,20 @@ func nameField(initial string) fieldSpec {
 	return fieldSpec{key: foundation.NewKey("field-name"), label: "Name", initial: initial, lines: 1}
 }
 
-// addPerson opens the dialog that adds a person, with keys if the user pastes some.
+// addPerson opens the dialog that adds a person. A person needs a key to connect, so the dialog
+// asks for the name and the keys together and adds nobody unless both are acceptable: the
+// sentence of a refusal goes under the field it belongs to.
 func addPerson(bc m.BuildContext, v *view) {
-	// The person who was added when the keys were not, so that sending the form again adds the
-	// keys to the same person and does not try to add the name again.
-	var added *people.Person
 	showForm(bc, v.run, "Add person", "Add", []fieldSpec{
 		nameField(""),
-		{key: foundation.NewKey("field-keys"), label: "Public keys (optional)", lines: 5},
+		{key: foundation.NewKey("field-keys"), label: "Public keys", lines: 5},
 	}, func(ctx context.Context, values []string) formResult {
-		if added == nil {
-			person, err := v.app.AddPerson(ctx, values[0])
-			if err != nil {
-				return formResult{errors: map[int]string{0: app.Message(err)}}
+		if _, err := v.app.AddPerson(ctx, values[0], values[1]); err != nil {
+			field := 1
+			if appErr, ok := errors.FromError(err); ok && (appErr.Tag == people.TagPersonNameInvalid || appErr.Tag == people.TagPersonNameTaken) {
+				field = 0
 			}
-			added = &person
-		}
-		if values[1] == "" {
-			return formResult{done: true}
-		}
-		if _, err := v.app.AddKeys(ctx, added.ID, values[1]); err != nil {
-			return formResult{
-				notice: added.Name + " was added. The keys were not:",
-				errors: map[int]string{1: app.Message(err)},
-			}
+			return formResult{errors: map[int]string{field: app.Message(err)}}
 		}
 		return formResult{done: true}
 	})

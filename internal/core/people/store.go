@@ -422,7 +422,52 @@ func (s *Store) ByName(name string) (Person, bool) {
 	return st.people[i].clone(), true
 }
 
-// Add adds an enabled person without keys.
+// CheckName says whether a person could be added with the name: nil, or the error Add would give
+// for the name (PersonNameInvalid, PersonNameTaken). It changes nothing.
+func (s *Store) CheckName(name string) error {
+	return checkName(s.current.Load(), name, "")
+}
+
+// AddWithKeys adds an enabled person with the public keys of a text in the authorized_keys
+// format, as one change: a person needs a key to connect, so the person is not added without
+// one. A name that is not acceptable is refused before the keys are read. A text that holds no
+// key (KeyTextEmpty), a line that is not an acceptable key, or a key that somebody already has
+// (KeyAlreadyAssigned) refuses the whole addition, and nobody is added.
+func (s *Store) AddWithKeys(ctx context.Context, name, keysText string) (Person, error) {
+	s.write.Lock()
+	st := s.current.Load()
+	if err := checkName(st, name, ""); err != nil {
+		s.write.Unlock()
+		return Person{}, err
+	}
+	parsed, err := ParseKeys(keysText)
+	if err != nil {
+		s.write.Unlock()
+		return Person{}, err
+	}
+	now := s.now()
+	keys, err := newKeys(st, parsed, now)
+	if err != nil {
+		s.write.Unlock()
+		return Person{}, err
+	}
+	p := Person{ID: ids.New(personPrefix), Name: name, Enabled: true, CreatedAt: now, Keys: keys}
+	if err := s.commit(ctx, append(st.copyPeople(), p)); err != nil {
+		s.write.Unlock()
+		return Person{}, err
+	}
+	s.write.Unlock()
+	change := Change{Kind: PersonAdded, PersonID: p.ID}
+	for _, k := range keys {
+		change.KeyIDs = append(change.KeyIDs, k.ID)
+	}
+	s.notify(change)
+	return p.clone(), nil
+}
+
+// Add adds an enabled person without keys, who cannot connect until they have one. The
+// application never calls it, because a person needs a key (AddWithKeys); it is for the tests of
+// what a person without keys can and cannot do.
 func (s *Store) Add(ctx context.Context, name string) (Person, error) {
 	s.write.Lock()
 	st := s.current.Load()
@@ -535,6 +580,19 @@ func (s *Store) ImportKeys(ctx context.Context, personID, path string) ([]Key, e
 	return s.addKeys(ctx, personID, string(data))
 }
 
+// newKeys makes the keys of parsed ones, refusing one that somebody already has.
+func newKeys(st *state, parsed []ParsedKey, now time.Time) ([]Key, error) {
+	keys := make([]Key, 0, len(parsed))
+	for _, pk := range parsed {
+		if owner, taken := st.byKey[string(pk.Public.Marshal())]; taken {
+			return nil, errors.New(TagKeyAlreadyAssigned, "this key already belongs to "+owner.personName,
+				"owner", owner.personName, "ownerID", owner.personID, "fingerprint", ssh.FingerprintSHA256(pk.Public))
+		}
+		keys = append(keys, newKey(ids.New(keyPrefix), pk.Public, pk.Comment, now))
+	}
+	return keys, nil
+}
+
 // addKeys is AddKeys.
 func (s *Store) addKeys(ctx context.Context, personID, text string) ([]Key, error) {
 	parsed, err := ParseKeys(text)
@@ -549,15 +607,10 @@ func (s *Store) addKeys(ctx context.Context, personID, text string) ([]Key, erro
 		s.write.Unlock()
 		return nil, err
 	}
-	now := s.now()
-	added := make([]Key, 0, len(parsed))
-	for _, pk := range parsed {
-		if owner, taken := st.byKey[string(pk.Public.Marshal())]; taken {
-			s.write.Unlock()
-			return nil, errors.New(TagKeyAlreadyAssigned, "this key already belongs to "+owner.personName,
-				"owner", owner.personName, "ownerID", owner.personID, "fingerprint", ssh.FingerprintSHA256(pk.Public))
-		}
-		added = append(added, newKey(ids.New(keyPrefix), pk.Public, pk.Comment, now))
+	added, err := newKeys(st, parsed, s.now())
+	if err != nil {
+		s.write.Unlock()
+		return nil, err
 	}
 	list[i].Keys = append(list[i].Keys, added...)
 	if err := s.commit(ctx, list); err != nil {

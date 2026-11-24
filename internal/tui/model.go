@@ -187,6 +187,10 @@ func (m Model) promptEnded(done promptDone) Model {
 			m.area = &in
 		} else {
 			m.area = nil
+			if done.selectID != "" {
+				m.peopleWanted = done.selectID
+				m.syncPeople()
+			}
 		}
 		return m
 	}
@@ -203,6 +207,9 @@ func (m Model) promptEnded(done promptDone) Model {
 	if done.selectID != "" {
 		m.peopleWanted = done.selectID
 		m.syncPeople()
+	}
+	if done.next != nil {
+		m = done.next(m)
 	}
 	return m
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/rm4n0s/cave/internal/app"
 	"github.com/rm4n0s/cave/internal/core/clock"
 	"github.com/rm4n0s/cave/internal/core/hostkey"
+	"github.com/rm4n0s/cave/internal/core/people"
 	"github.com/rm4n0s/cave/internal/core/session"
 	"github.com/rm4n0s/cave/internal/core/settings"
 	"github.com/rm4n0s/cave/internal/core/sshtest"
@@ -71,6 +72,8 @@ func Open(t testing.TB, more map[string]any) *Real {
 	seed := map[string]any{
 		string(settings.ServerAddress): "127.0.0.1", string(settings.ServerPort): port,
 		string(settings.SessionShell): shell, string(settings.ServerKeepAliveSeconds): 0,
+		// Off by default, but most tests need a server that runs.
+		string(settings.ServerStartOnLaunch): true,
 	}
 	for _, values := range []map[string]any{seed, more} {
 		for key, value := range values {
@@ -143,15 +146,28 @@ func (r *Real) HostKey() ssh.PublicKey {
 func (r *Real) Person(name string) sshtest.Key {
 	r.t.Helper()
 	ctx := context.Background()
-	p, err := r.App.AddPerson(ctx, name)
-	if err != nil {
-		r.t.Fatal(err)
-	}
 	key := sshtest.NewKey(r.t, sshtest.Ed25519)
-	if _, err := r.App.AddKeys(ctx, p.ID, key.AuthorizedKey); err != nil {
+	if _, err := r.App.AddPerson(ctx, name, key.AuthorizedKey); err != nil {
 		r.t.Fatal(err)
 	}
 	return key
+}
+
+// Keyless adds a person and takes their only key away again, through the commands: the state of
+// a person who has no key and so cannot connect. A person cannot be added without a key.
+func (r *Real) Keyless(name string) people.Person {
+	r.t.Helper()
+	ctx := context.Background()
+	key := sshtest.NewKey(r.t, sshtest.Ed25519)
+	p, err := r.App.AddPerson(ctx, name, key.AuthorizedKey)
+	if err != nil {
+		r.t.Fatal(err)
+	}
+	if err := r.App.RemoveKey(ctx, p.ID, p.Keys[0].ID); err != nil {
+		r.t.Fatal(err)
+	}
+	p.Keys = nil
+	return p
 }
 
 // Connect connects a client as the person with the key and waits until the application shows

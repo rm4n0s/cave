@@ -5,8 +5,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rm4n0s/cave/internal/app"
 	"github.com/rm4n0s/cave/internal/app/apptest"
 	"github.com/rm4n0s/cave/internal/core/people"
+	"github.com/rm4n0s/cave/internal/core/sshtest"
 	"github.com/rm4n0s/errors"
 	"golang.org/x/crypto/ssh"
 )
@@ -14,6 +16,16 @@ import (
 // nameTaken is the error of a name that another person has, as the store gives it.
 func nameTaken() error {
 	return errors.New("PersonNameTaken", "another person has this name", "name", "dave", "takenBy", "alice")
+}
+
+// keyNotParsed is the error of a text that is not a public key.
+func keyNotParsed() error {
+	return errors.New("KeyParseFailed", "not a key", "line", 1)
+}
+
+// keyTextEmpty is the error of a text with no key in it.
+func keyTextEmpty() error {
+	return errors.New("KeyTextEmpty", "there is no public key in the text")
 }
 
 func TestGoldenPeople(t *testing.T) {
@@ -32,9 +44,25 @@ func TestGoldenPeople(t *testing.T) {
 		{"add-60x16", func() *apptest.Fake { return apptest.Sample(t) }, 60, 16, func(h *harness) { h.key("a"); h.typeText("da") }},
 		{"add-error-100x30", func() *apptest.Fake {
 			f := apptest.Sample(t)
-			f.Fail = map[string]error{"AddPerson": nameTaken()}
+			f.Fail = map[string]error{"CheckPersonName": nameTaken()}
 			return f
 		}, 100, 30, func(h *harness) { h.key("a"); h.typeText("dave"); h.key("enter") }},
+		{"add-keys-100x30", func() *apptest.Fake { return apptest.Sample(t) }, 100, 30, func(h *harness) {
+			h.key("a")
+			h.typeText("dave")
+			h.key("enter")
+		}},
+		{"add-keys-error-100x30", func() *apptest.Fake {
+			f := apptest.Sample(t)
+			f.Fail = map[string]error{"AddPerson": keyNotParsed()}
+			return f
+		}, 100, 30, func(h *harness) {
+			h.key("a")
+			h.typeText("dave")
+			h.key("enter")
+			h.paste("not a key")
+			h.key("ctrl+d")
+		}},
 		{"rename-100x30", func() *apptest.Fake { return apptest.Sample(t) }, 100, 30, func(h *harness) { h.key("e") }},
 		{"remove-100x30", func() *apptest.Fake { return apptest.Sample(t) }, 100, 30, func(h *harness) { h.key("d") }},
 		{"disable-100x30", func() *apptest.Fake { return apptest.Sample(t) }, 100, 30, func(h *harness) { h.key("space") }},
@@ -81,6 +109,8 @@ func TestPeopleTable(t *testing.T) {
 	}
 }
 
+const davesKey = "ssh-ed25519 AAAA dave@laptop"
+
 func TestAddAPerson(t *testing.T) {
 	f := apptest.Sample(t)
 	h := newFakeHarness(t, f, 100, 30)
@@ -89,11 +119,20 @@ func TestAddAPerson(t *testing.T) {
 	if !strings.Contains(h.screen(), "Name of the new person: dave") {
 		t.Errorf("the field:\n%s", h.screen())
 	}
+	// The name is checked, and nobody is added yet: the keys are asked for next.
 	h.key("enter")
-	if got := f.Calls(); len(got) != 1 || got[0] != "AddPerson(dave)" {
+	if got := f.Calls(); len(got) != 1 || got[0] != "CheckPersonName(dave)" {
+		t.Errorf("calls = %q, want only the check of the name", got)
+	}
+	if h.m().prompt != nil || h.m().area == nil || !strings.Contains(h.screen(), "Paste the public keys of dave") {
+		t.Fatalf("the keys are not asked for:\n%s", h.screen())
+	}
+	h.paste(davesKey)
+	h.key("ctrl+d")
+	if got := f.Calls(); len(got) != 2 || got[1] != `AddPerson(dave, "`+davesKey+`")` {
 		t.Errorf("calls = %q", got)
 	}
-	if h.m().prompt != nil {
+	if h.m().area != nil {
 		t.Error("the field stayed open after the person was added")
 	}
 	if h.m().peopleWanted != "p_ffffffffffffffff" {
@@ -108,16 +147,16 @@ func TestAddAPerson(t *testing.T) {
 	}
 }
 
-func TestAddAPersonThatFails(t *testing.T) {
+func TestAddAPersonWithANameThatFails(t *testing.T) {
 	f := apptest.Sample(t)
-	f.Fail = map[string]error{"AddPerson": nameTaken()}
+	f.Fail = map[string]error{"CheckPersonName": nameTaken()}
 	h := newFakeHarness(t, f, 100, 30)
 	h.keys("2", "a")
 	h.typeText("dave")
 	h.key("enter")
 	screen := h.screen()
-	if h.m().prompt == nil || h.m().prompt.f.value() != "dave" {
-		t.Fatalf("the field did not stay open with its text:\n%s", screen)
+	if h.m().prompt == nil || h.m().prompt.f.value() != "dave" || h.m().area != nil {
+		t.Fatalf("the field did not stay open with its text, or the keys were asked for:\n%s", screen)
 	}
 	if !strings.Contains(screen, "There is already a person named alice.") || !strings.Contains(screen, "Name of the new person: dave") {
 		t.Errorf("the sentence and the field are not both there:\n%s", screen)
@@ -140,12 +179,52 @@ func TestAddAPersonThatFails(t *testing.T) {
 	h.keys("backspace", "e")
 	f.Fail = nil
 	h.key("enter")
-	if got := f.Calls(); len(got) != 2 || got[1] != "AddPerson(dave)" {
-		t.Errorf("calls = %q", got)
+	if got := f.Calls(); len(got) != 2 || got[1] != "CheckPersonName(dave)" || h.m().area == nil {
+		t.Errorf("calls = %q, area %v", got, h.m().area)
 	}
-	h.keys("a", "esc")
-	if h.m().prompt != nil || len(f.Calls()) != 2 {
-		t.Errorf("esc: prompt %v, calls %q", h.m().prompt, f.Calls())
+	h.key("esc")
+	if h.m().area != nil || len(f.Calls()) != 2 {
+		t.Errorf("esc: area %v, calls %q", h.m().area, f.Calls())
+	}
+	for _, c := range f.Calls() {
+		if strings.HasPrefix(c, "AddPerson(") {
+			t.Errorf("a person was added without keys: %q", f.Calls())
+		}
+	}
+}
+
+func TestAddAPersonWithKeysThatFail(t *testing.T) {
+	f := apptest.Sample(t)
+	f.Fail = map[string]error{"AddPerson": keyNotParsed()}
+	h := newFakeHarness(t, f, 100, 30)
+	h.keys("2", "a")
+	h.typeText("dave")
+	h.key("enter")
+	h.paste("not a key")
+	h.key("ctrl+d")
+	screen := h.screen()
+	if h.m().area == nil || !strings.Contains(screen, app.Message(keyNotParsed())) {
+		t.Fatalf("the field did not stay open with the sentence:\n%s", screen)
+	}
+	// The keys are corrected and sent again.
+	f.Fail = nil
+	h.paste("\n" + davesKey)
+	h.key("ctrl+d")
+	if got := f.Calls(); len(got) != 3 || !strings.HasPrefix(got[2], "AddPerson(dave, ") || h.m().area != nil {
+		t.Errorf("calls = %q, area %v", got, h.m().area)
+	}
+}
+
+func TestEmptyKeysAreSentAndTheApplicationRefusesThem(t *testing.T) {
+	f := apptest.Sample(t)
+	f.Fail = map[string]error{"AddPerson": keyTextEmpty()}
+	h := newFakeHarness(t, f, 100, 30)
+	h.keys("2", "a")
+	h.typeText("dave")
+	h.key("enter")
+	h.key("ctrl+d")
+	if h.m().area == nil || !strings.Contains(h.screen(), app.Message(keyTextEmpty())) {
+		t.Errorf("the empty keys were not refused under the field:\n%s", h.screen())
 	}
 }
 
@@ -399,12 +478,18 @@ func TestPeopleFlowsWithTheRealApplication(t *testing.T) {
 	h.key("2")
 
 	// Add alice.
+	aliceKey := sshtest.NewKey(t, sshtest.Ed25519)
 	h.key("a")
 	h.typeText("alice")
 	h.key("enter")
+	if len(r.App.People()) != 0 || h.m().area == nil {
+		t.Fatalf("alice was added before her keys, or the keys were not asked for:\n%s", h.screen())
+	}
+	h.paste(aliceKey.AuthorizedKey + " laptop")
+	h.key("ctrl+d")
 	h.send(changedMsg{})
 	list := r.App.People()
-	if len(list) != 1 || list[0].Name != "alice" || h.m().prompt != nil {
+	if len(list) != 1 || list[0].Name != "alice" || len(list[0].Keys) != 1 || h.m().prompt != nil || h.m().area != nil {
 		t.Fatalf("people %+v, prompt %v", list, h.m().prompt)
 	}
 	if h.m().peopleSel != list[0].ID || !strings.Contains(h.screen(), "> alice") {
@@ -419,6 +504,24 @@ func TestPeopleFlowsWithTheRealApplication(t *testing.T) {
 		t.Errorf("a bad name:\n%s", h.screen())
 	}
 	h.typeText("!") // the field is still the user's: the sentence stays until the next try
+	h.key("esc")
+
+	// A name that is taken is told before the keys are asked for; so are the keys that are not
+	// acceptable, and neither adds anybody.
+	h.key("a")
+	h.typeText("ALICE")
+	h.key("enter")
+	if h.m().prompt == nil || h.m().area != nil || !strings.Contains(h.screen(), "There is already a person named alice.") {
+		t.Errorf("a name that is taken:\n%s", h.screen())
+	}
+	h.key("esc")
+	h.key("a")
+	h.typeText("bob")
+	h.key("enter")
+	h.key("ctrl+d")
+	if h.m().area == nil || !strings.Contains(h.screen(), "There is no public key in the text.") || len(r.App.People()) != 1 {
+		t.Errorf("no keys:\n%s", h.screen())
+	}
 	h.key("esc")
 
 	// Rename her.

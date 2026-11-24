@@ -317,7 +317,7 @@ func TestAddKeys(t *testing.T) {
 	t.Run("a key somebody has is refused", func(t *testing.T) {
 		for _, personID := range []string{alice.ID, bob.ID} {
 			_, err := f.AddKeys(ctx, personID, a1.line)
-			meta := errtest.Route(t, err, "Store.AddKeys->Store.addKeys.KeyAlreadyAssigned")
+			meta := errtest.Route(t, err, "Store.AddKeys->Store.addKeys->newKeys.KeyAlreadyAssigned")
 			if meta["owner"] != "alice" || meta["ownerID"] != alice.ID || meta["fingerprint"] != ssh.FingerprintSHA256(a1.public) {
 				t.Errorf("metadata = %v", meta)
 			}
@@ -328,7 +328,7 @@ func TestAddKeys(t *testing.T) {
 		f.changes = nil
 		// A new key and one that alice has: neither is added to bob.
 		_, err := f.AddKeys(ctx, bob.ID, b1.line+"\n"+a2.line+"\n")
-		errtest.Route(t, err, "Store.addKeys.KeyAlreadyAssigned")
+		errtest.Route(t, err, "Store.addKeys->newKeys.KeyAlreadyAssigned")
 		// A new key and a line that is not a key.
 		_, err = f.AddKeys(ctx, bob.ID, b1.line+"\nnot a key\n")
 		meta := errtest.Route(t, err, "Store.AddKeys->Store.addKeys->ParseKeys.KeyParseFailed")
@@ -371,7 +371,7 @@ func TestImportKeys(t *testing.T) {
 
 	// The same rules as pasted text.
 	_, err = f.ImportKeys(ctx, alice.ID, pub)
-	errtest.Route(t, err, "Store.ImportKeys->Store.addKeys.KeyAlreadyAssigned")
+	errtest.Route(t, err, "Store.ImportKeys->Store.addKeys->newKeys.KeyAlreadyAssigned")
 
 	missing := filepath.Join(dir, "missing.pub")
 	_, err = f.ImportKeys(ctx, alice.ID, missing)
@@ -859,5 +859,74 @@ func TestThePeopleFileIsPrivate(t *testing.T) {
 		if e.Name() != FileName {
 			t.Errorf("%s is left behind next to the people file", e.Name())
 		}
+	}
+}
+
+func TestAddWithKeys(t *testing.T) {
+	f := newFixture(t)
+	a1, a2 := newEd25519(t), newECDSA(t, ellipticP256())
+	f.clock.Advance(time.Minute)
+	p, err := f.AddWithKeys(ctx, "alice", "# keys\n"+a1.line+" laptop\n"+a2.line+" phone\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Name != "alice" || !p.Enabled || len(p.Keys) != 2 || p.Keys[0].Comment != "laptop" || p.Keys[1].Comment != "phone" {
+		t.Errorf("the new person is %+v", p)
+	}
+	if got, ok := f.Get(p.ID); !ok || !reflect.DeepEqual(got, p) {
+		t.Errorf("Get = %+v, %v", got, ok)
+	}
+	if want := []Change{{Kind: PersonAdded, PersonID: p.ID, KeyIDs: []string{p.Keys[0].ID, p.Keys[1].ID}}}; !reflect.DeepEqual(f.changes, want) {
+		t.Errorf("changes = %+v, want one change that holds the person and the keys", f.changes)
+	}
+	// The keys work at once, and the file holds the person with the keys.
+	if res := f.Lookup("alice", a1.public); res.Reason != Accepted {
+		t.Errorf("Lookup of the first key = %+v", res)
+	}
+	if got := f.fileContent(t); !strings.Contains(got, "laptop") || !strings.Contains(got, "alice") {
+		t.Errorf("the file lacks the person or the keys: %s", got)
+	}
+
+	// Whatever is wrong adds nobody, writes nothing and tells nobody.
+	before := f.fileContent(t)
+	f.changes = nil
+	b1 := newEd25519(t)
+	tests := []struct {
+		name, person, text, route string
+	}{
+		{"no key", "bob", "", "Store.AddWithKeys->ParseKeys.KeyTextEmpty"},
+		{"only a comment", "bob", "# nothing\n", "Store.AddWithKeys->ParseKeys.KeyTextEmpty"},
+		{"a line that is not a key", "bob", b1.line + "\nnot a key\n", "Store.AddWithKeys->ParseKeys.KeyParseFailed"},
+		{"a private key", "bob", "-----BEGIN OPENSSH PRIVATE KEY-----\nx\n-----END OPENSSH PRIVATE KEY-----", "Store.AddWithKeys->ParseKeys.KeyIsPrivate"},
+		{"a key somebody has", "bob", b1.line + "\n" + a2.line, "Store.AddWithKeys->newKeys.KeyAlreadyAssigned"},
+		{"a name that is not valid", "-bob", b1.line, "Store.AddWithKeys->checkName.PersonNameInvalid"},
+		{"a name that is taken", "Alice", b1.line, "Store.AddWithKeys->checkName.PersonNameTaken"},
+		{"a bad name and no key: the name is told first", "-bob", "", "Store.AddWithKeys->checkName.PersonNameInvalid"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := f.AddWithKeys(ctx, tt.person, tt.text)
+			errtest.Route(t, err, tt.route)
+		})
+	}
+	if got := f.fileContent(t); got != before {
+		t.Error("a refused addition changed the file")
+	}
+	if len(f.changes) != 0 || !reflect.DeepEqual(f.names(), []string{"alice"}) {
+		t.Errorf("a refused addition left changes %+v and the people %v", f.changes, f.names())
+	}
+}
+
+func TestCheckName(t *testing.T) {
+	f := newFixture(t)
+	f.add(t, "alice")
+	f.changes = nil
+	if err := f.CheckName("bob"); err != nil {
+		t.Errorf("CheckName(bob) = %v", err)
+	}
+	errtest.Route(t, f.CheckName("ALICE"), "Store.CheckName->checkName.PersonNameTaken")
+	errtest.Route(t, f.CheckName("-x"), "Store.CheckName->checkName.PersonNameInvalid")
+	if len(f.changes) != 0 || !reflect.DeepEqual(f.names(), []string{"alice"}) {
+		t.Errorf("CheckName changed something: %+v %v", f.changes, f.names())
 	}
 }

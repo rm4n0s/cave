@@ -106,7 +106,7 @@ type Def struct {
 var schema = []Def{
 	{Key: string(ServerPort), Kind: KindInt, Default: 2222, Min: 1, Max: 65535},
 	{Key: string(ServerAddress), Kind: KindString, Default: "", check: checkAddress},
-	{Key: string(ServerStartOnLaunch), Kind: KindBool, Default: true},
+	{Key: string(ServerStartOnLaunch), Kind: KindBool, Default: false},
 	{Key: string(ServerKeepAliveSeconds), Kind: KindInt, Default: 60, Min: 0, Max: 3600},
 	{Key: string(AttemptsClear), Kind: KindChoice, Default: ClearNever,
 		Choices: []string{ClearNever, ClearOnStart, ClearHourly, ClearDaily, ClearWeekly, ClearMonthly}},

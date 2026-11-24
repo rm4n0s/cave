@@ -45,7 +45,7 @@ A **person** is somebody you let in. Each person has a **name** and one or more 
 
 **Disabling, renaming and removing.** A **disabled** person cannot connect, and keeps their keys; enable them again later. **Renaming** a person, **disabling** or **removing** them, or removing one of their keys, disconnects the connections that person (or that key) has open right now.
 
-A person with no key cannot connect.
+**A person is added with a key.** The Add person form (and `a` in `tcave`) asks for the name and the public key, and adds nobody unless both are right: a name that is taken or not valid, a text with no key, or a key that is not acceptable is refused with the sentence above, and nothing is added. A person can end up with no key only when you remove their last one, and then they cannot connect.
 
 ## The attempts list
 
@@ -93,7 +93,7 @@ Settings take effect at once. They are saved in `settings.json` in the configura
 |---|---|---|
 | `server.port` | `2222` | The port Cave listens on, from 1 to 65535. A port below 1024 may need rights Cave does not have. |
 | `server.address` | empty | The address to listen on. Empty means every network interface, IPv4 and IPv6. Otherwise one IP address, such as `127.0.0.1` to be reachable only from this computer. |
-| `server.startOnLaunch` | on | Start the server when Cave starts. |
+| `server.startOnLaunch` | off | Start the server when Cave starts. By default you start it yourself. |
 | `server.keepAliveSeconds` | `60` | How often to check that a client is still there (0 to 3600; 0 turns it off). |
 | `attempts.clear` | `never` | When the attempts list is emptied by itself: `never`, `onStart`, `hourly`, `daily`, `weekly` or `monthly`. |
 | `session.shell` | empty | The shell people get. Empty means your own shell (on Windows: `cmd.exe`). |
@@ -136,7 +136,7 @@ Both programs take the same flags. A flag is for one run and is never saved.
 | `--config-dir <folder>` | Use this folder for the settings, the people and the host key. The variable `CAVE_CONFIG_DIR` does the same; the flag wins. |
 | `--state-dir <folder>` | Use this folder for the attempts list, the log and the lock. The variable `CAVE_STATE_DIR` does the same; the flag wins. |
 | `--port <port>` | Listen on this port for this run, whatever the settings say. |
-| `--no-start` | Do not start the server when the program starts. |
+| `--no-start` | Do not start the server when the program starts (it is already so unless `server.startOnLaunch` is on). |
 | `--allow-root` | Run although the user is root. Every person would get a root shell: do not, unless you mean it. |
 | `--log-level <level>` | What the log has: `debug`, `info` (the default), `warn` or `error`. |
 | `--page <page>` | The page to show first: `overview`, `people`, `attempts`, `connections` or `settings`. |

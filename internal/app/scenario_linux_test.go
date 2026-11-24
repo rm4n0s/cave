@@ -16,12 +16,8 @@ func TestScenarioWithOpenSSH(t *testing.T) {
 	a := f.open(nil)
 
 	// 1. A person with a key, and the line to give them.
-	alice, err := a.AddPerson(ctx, "alice")
-	if err != nil {
-		t.Fatal(err)
-	}
 	key := sshtest.NewKey(t, sshtest.Ed25519)
-	if _, err := a.AddKeys(ctx, alice.ID, key.AuthorizedKey+" laptop"); err != nil {
+	if _, err := a.AddPerson(ctx, "alice", key.AuthorizedKey+" laptop"); err != nil {
 		t.Fatal(err)
 	}
 	t.Logf("1. added alice with one key; the line to give her is: %s", a.Server().Command("alice", "127.0.0.1"))

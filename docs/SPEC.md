@@ -127,7 +127,7 @@ Files are written atomically: a temporary file in the same folder with mode `060
 |---|---|---|---|
 | `server.port` | integer 1–65535 | `2222` | The port Cave listens on |
 | `server.address` | string | `""` | The address to listen on; empty means every interface (IPv4 and IPv6). Otherwise an IP literal |
-| `server.startOnLaunch` | boolean | `true` | Start the server when Cave starts |
+| `server.startOnLaunch` | boolean | `false` | Start the server when Cave starts. Off: the user starts the server (Start on the Overview page, the tray, or `s` in the TUI) once the people and their keys are in (the user, 2026-11-25) |
 | `server.keepAliveSeconds` | integer 0–3600 | `60` | Look this often whether anything arrived from a client, and ask a silent one whether it is there; after 3 more silent looks, disconnect (§9.9). `0` turns it off |
 | `attempts.clear` | `never`, `onStart`, `hourly`, `daily`, `weekly`, `monthly` | `never` | When the attempts list is cleared (§8.4) |
 | `session.shell` | string | `""` | The shell of sessions; empty means the user's own (§9.5, §13.2) |
@@ -165,7 +165,7 @@ When a new `server.port` or `server.address` moves the listener, the old listene
 - `name`: the login name. 1 to 32 characters of `A–Z a–z 0–9 . _ -`, not starting with `-` or `.`. Unique ignoring case (`PersonNameTaken`); compared exactly at login. A bad name is `PersonNameInvalid`.
 - `enabled`: a disabled person cannot connect; their keys stay.
 - A person or key that a command names and that does not exist is `PersonNotFound` or `KeyNotFound`. A `people.json` that breaks one of these rules (a bad or repeated id or name, a key that is not acceptable or is there twice) is `PeopleFileInvalid`.
-- A person may have no key (then they cannot connect).
+- A person is **added with at least one key**: `AddPerson(name, keys)` adds the person and the keys as one change, and a text with no key (`KeyTextEmpty`), a line that is not an acceptable key, or a key somebody has (`KeyAlreadyAssigned`) adds nobody (the user, 2026-11-25: "it will not allow to add a person without a key, for gui and tui"). The name is checked first (`PersonNameInvalid`, `PersonNameTaken`), so a bad name is told before the keys. A person can still end up with no key, when their last key is removed, and then they cannot connect.
 - Renaming, disabling or removing a person, or removing a key, **disconnects** every connection that was authenticated as that person (rename, disable, remove) or with that key (remove key).
 
 ### 7.2 Keys
@@ -394,7 +394,7 @@ Every `server.keepAliveSeconds`, Cave looks at what arrived from each connection
 `app.Open(ctx, Options) (*App, error)` takes the lock, opens the log, loads settings, people, attempts and the host key, applies `attempts.clear` (`onStart`, or an overdue period), and starts the server when `server.startOnLaunch` (and not `--no-start`). `(*App).Close(ctx)` stops the server, saves, releases the lock.
 
 - **Snapshots** (plain values, safe to keep): `Server()` (state, listening addresses, error, host key fingerprint, the addresses of this computer with a ready `ssh -p <port> <name>@<address>` line), `People()`, `Attempts()` (entries, last cleared, next clear), `Connections()`, `Settings()`.
-- **Commands**: `StartServer`, `StopServer`; `AddPerson`, `RenamePerson`, `SetPersonEnabled`, `RemovePerson`, `AddKeys` (text), `ImportKeys` (file), `SetKeyComment`, `RemoveKey`; `ClearAttempts`, `RemoveAttempt`; `Disconnect`, `DisconnectAll`; `Set` (one setting); `NewHostKey`. Each returns an `error` with a Tag the UIs turn into a sentence (`DisconnectAll` cannot fail and returns nothing).
+- **Commands**: `StartServer`, `StopServer`; `AddPerson` (name and keys text), `CheckPersonName` (changes nothing), `RenamePerson`, `SetPersonEnabled`, `RemovePerson`, `AddKeys` (text), `ImportKeys` (file), `SetKeyComment`, `RemoveKey`; `ClearAttempts`, `RemoveAttempt`; `Disconnect`, `DisconnectAll`; `Set` (one setting); `NewHostKey`. Each returns an `error` with a Tag the UIs turn into a sentence (`DisconnectAll` cannot fail and returns nothing).
 - **Events**: `Subscribe(func(Event)) (cancel func())`. `Changed{Topics}` (a set of `Server`, `People`, `Attempts`, `Connections`, `Settings`), coalesced to at most one every 100 ms; `Accepted{person, address}` and `Rejected{entry}` for notifications. These two are made from the attempts that are recorded and handed to the subscribers by a goroutine of their own, through a queue of 64: a subscriber that is slow loses the newest events and never holds up a connection. `Rejected` is sent at most once a minute (by the application's clock). Nothing is sent after `Close`.
 - `app.Message(err)` turns an error into the sentence shown to the user (one table of sentences by Tag for both UIs, filled in from the error's metadata, every value made safe with `sanitize.Display`); an unknown Tag shows the error's own message.
 - **Words** both UIs show are written once here: the wording of an attempt's result (§11.3), relative times ("3 min ago", "in 4 d"), what a connection has open, the question before quitting (§11.6), and each setting's group, label and one-line explanation (§11.5).
@@ -412,7 +412,7 @@ Material 3, light and dark (`ui.theme`), one window (960×640 at first, at least
 The server's state with one big Start/Stop button; the listening port; the host key fingerprint (copy button); "How to connect": for each address of this computer, the line `ssh -p <port> <name>@<address>` (copy button); counts: people, connected now, attempts in the list. When the server could not start, the error and what to do. When there are no people, a hint with a button to the People page.
 
 ### 11.2 People
-A list of people (name, number of keys, enabled switch, connected-now mark). "Add person" asks for the name and, optionally, keys (a multi-line field for pasting, and "Import from file…" through the system's file dialog). Selecting a person shows their keys (type, fingerprint, comment, added) with add, edit comment and remove, and Rename and Remove for the person. Removing a person or a key asks first, and says how many connections it will close. Errors of §7 appear under the field they belong to.
+A list of people (name, number of keys, enabled switch, connected-now mark). "Add person" asks for the name and the public keys (a multi-line field for pasting; the keys are required) and adds nobody unless both are acceptable: the sentence of a refusal appears under the field it belongs to. "Import from file…" through the system's file dialog is for adding keys to a person who exists. Selecting a person shows their keys (type, fingerprint, comment, added) with add, edit comment and remove, and Rename and Remove for the person. Removing a person or a key asks first, and says how many connections it will close. Errors of §7 appear under the field they belong to.
 
 ### 11.3 Attempts
 A table: Who, Login name, Address, Result, Count, First, Last. A filter (All, Accepted, Refused) and a search field (who, login name, address). Selecting a row shows the rest (client version, key fingerprints, key owner). "Clear list" (asks first) and "Remove". A line says when the list was last cleared and when it will be next, with a link to the setting. Refused results are worded for the user ("Unknown name", "Wrong key", "No key offered", "Key not proven", "Disabled person", "Not SSH or broken handshake", "Too many connections").
@@ -434,7 +434,7 @@ The same five pages, in the alternate screen, with the mouse off (so the termina
 
 - A header: "Cave", the server's state and port, connected-now and attempts counts. A footer: the keys of the current page.
 - `1`–`5` or `Tab`/`Shift+Tab` change page; `s` starts or stops the server; `?` shows every key; `q` or `Ctrl+C` quits (asking when people are connected). Lists move with the arrows, `j`/`k`, `PgUp`/`PgDn`, `Home`/`End`.
-- People: `a` add, `Enter` open, `e` rename, `Space` enable/disable, `d` remove (asks); inside a person: `a` add keys (a multi-line field; paste works through bracketed paste), `i` import from a file (a path field), `c` edit comment, `d` remove key, `Esc` back.
+- People: `a` add (asks the name, which is checked, then the keys in a multi-line field, ctrl+d to add; nobody is added without a key), `Enter` open, `e` rename, `Space` enable/disable, `d` remove (asks); inside a person: `a` add keys (a multi-line field; paste works through bracketed paste), `i` import from a file (a path field), `c` edit comment, `d` remove key, `Esc` back.
 - Attempts: `f` cycles the filter, `/` searches, `Enter` shows details, `d` removes, `C` clears (asks).
 - Connections: `d` disconnect (asks), `D` disconnect all (asks).
 - Settings: `Enter` or `Space` changes (a switch flips, a choice cycles, a number or text opens a field); `Esc` cancels an edit.

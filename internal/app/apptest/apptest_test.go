@@ -154,7 +154,7 @@ func TestFakeRecordsCalls(t *testing.T) {
 	failure := errors.New("ConnectionNotFound", "no such connection")
 	f.Fail = map[string]error{"Disconnect": failure}
 
-	if _, err := f.AddPerson(ctx, "dave"); err != nil {
+	if _, err := f.AddPerson(ctx, "dave", "ssh-ed25519 AAAA"); err != nil {
 		t.Fatal(err)
 	}
 	_ = f.RenamePerson(ctx, "p_1", "erin")
@@ -169,7 +169,7 @@ func TestFakeRecordsCalls(t *testing.T) {
 	}
 	f.DisconnectAll()
 	want := []string{
-		"AddPerson(dave)",
+		`AddPerson(dave, "ssh-ed25519 AAAA")`,
 		"RenamePerson(p_1, erin)",
 		"SetPersonEnabled(p_1, false)",
 		"Set(server.port, 2200)",

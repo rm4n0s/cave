@@ -26,9 +26,9 @@ Or take the files of a release, if the author published them: an archive for Lin
 
 ## First use
 
-1. **Start it.** Run `cave` (or `tcave`). The server starts by itself and listens on port 2222. The Overview page says so.
-2. **Add a person.** Go to the People page and add a name, such as `alice`. This is the name the person types before the `@` in `ssh alice@your-computer`.
-3. **Paste their public key.** Ask the person for their *public* key: the file that ends in `.pub`, usually `~/.ssh/id_ed25519.pub`. Paste its text under the person. Never ask for the private key (the file without `.pub`): Cave refuses it.
+1. **Open it.** Run `cave` (or `tcave`). The server does not start by itself: the Overview page says it is stopped.
+2. **Add a person with a key.** Go to the People page and add a name, such as `alice`: the name the person types before the `@` in `ssh alice@your-computer`. Ask the person for their *public* key: the file that ends in `.pub`, usually `~/.ssh/id_ed25519.pub`, and paste its text with the name. Cave adds nobody without a key. Never ask for the private key (the file without `.pub`): Cave refuses it.
+3. **Start the server.** Press Start on the Overview page. It listens on port 2222. (Turn on "Start when Cave starts" in Settings if you want it to start by itself.)
 4. **Give them the `ssh` line.** The Overview page shows how to connect, for example `ssh -p 2222 alice@192.168.1.20`. Send it to the person. Your computer must be reachable by them (the same network, or a port opened on your router).
 5. **Watch the Attempts page.** Every connection to Cave's port is listed there, with who it was, where from, what came of it and how many times. A person who is turned away shows why.
 

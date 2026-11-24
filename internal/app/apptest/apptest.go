@@ -41,7 +41,8 @@ type Application interface {
 	StartServer(ctx context.Context) error
 	StopServer(ctx context.Context) error
 	Set(ctx context.Context, key string, value any) error
-	AddPerson(ctx context.Context, name string) (people.Person, error)
+	AddPerson(ctx context.Context, name, keysText string) (people.Person, error)
+	CheckPersonName(name string) error
 	RenamePerson(ctx context.Context, id, name string) error
 	SetPersonEnabled(ctx context.Context, id string, enabled bool) error
 	RemovePerson(ctx context.Context, id string) error

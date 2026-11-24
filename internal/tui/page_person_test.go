@@ -375,10 +375,7 @@ func TestEveryErrorOfAPasteIsShown(t *testing.T) {
 
 func TestAddAKeyByPasteThenConnectAndRemoveIt(t *testing.T) {
 	r := apptest.Open(t, nil)
-	p, err := r.App.AddPerson(ctx, "carol")
-	if err != nil {
-		t.Fatal(err)
-	}
+	p := r.Keyless("carol")
 	key := sshtest.NewKey(t, sshtest.Ed25519)
 	h := newHarness(t, r.App, r.Clock, 120, 30)
 	h.send(changedMsg{})
@@ -410,9 +407,7 @@ func TestAddAKeyByPasteThenConnectAndRemoveIt(t *testing.T) {
 
 func TestImportAFileWithTheRealApplication(t *testing.T) {
 	r := apptest.Open(t, nil)
-	if _, err := r.App.AddPerson(ctx, "dave"); err != nil {
-		t.Fatal(err)
-	}
+	r.Keyless("dave")
 	key := sshtest.NewKey(t, sshtest.Ed25519)
 	path := filepath.Join(t.TempDir(), "dave.pub")
 	if err := os.WriteFile(path, []byte(key.AuthorizedKey+" from a file\n"), 0o600); err != nil {

@@ -4,7 +4,7 @@ Cave   running on port 2222                                                 1 co
 Server                                                                                              
   Port                                   2222                                                       
   Address                                —                                                          
-  Start when Cave starts                 on                                                         
+  Start when Cave starts                 off                                                        
   Keep-alive (seconds)                   60                                                         
                                                                                                     
 Attempts list                                                                                       

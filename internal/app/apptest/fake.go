@@ -44,7 +44,7 @@ type fakeListener struct {
 var _ Application = (*Fake)(nil)
 
 // Calls returns the commands called so far, oldest first, one line each: the method name and its
-// arguments written with %v ("AddPerson(dave)", "SetPersonEnabled(p_00000000000000a1, false)",
+// arguments written with %v ("AddPerson(dave, \"ssh-ed25519 AAAA\")", "SetPersonEnabled(p_00000000000000a1, false)",
 // "Set(server.port, 2200)", "StopServer()"), except the arguments that are free text, which are
 // quoted ("AddKeys(p_00000000000000a1, \"ssh-ed25519 AAAA…\")", "SetKeyComment(p, k, \"desk\")").
 func (f *Fake) Calls() []string {
@@ -140,11 +140,16 @@ func (f *Fake) Set(_ context.Context, key string, value any) error {
 }
 
 // AddPerson records the call. The person it returns is only the name, with a fixed id.
-func (f *Fake) AddPerson(_ context.Context, name string) (people.Person, error) {
-	if err := f.record("AddPerson", name); err != nil {
+func (f *Fake) AddPerson(_ context.Context, name, keysText string) (people.Person, error) {
+	if err := f.record("AddPerson", name, quoted(keysText)); err != nil {
 		return people.Person{}, err
 	}
 	return people.Person{ID: "p_ffffffffffffffff", Name: name, Enabled: true}, nil
+}
+
+// CheckPersonName records the call.
+func (f *Fake) CheckPersonName(name string) error {
+	return f.record("CheckPersonName", name)
 }
 
 // RenamePerson records the call.

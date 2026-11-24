@@ -16,9 +16,18 @@ import (
 // the connections of a person who was renamed, disabled or removed, and of a key that was
 // removed (docs/SPEC.md §7.1).
 
-// AddPerson adds a person who can connect with the keys they are given later.
-func (a *App) AddPerson(ctx context.Context, name string) (people.Person, error) {
-	return a.people.Add(ctx, name)
+// AddPerson adds a person with the public keys in keysText (the authorized_keys format, one per
+// line). A person needs a key to connect, so there is no person without one: a text with no key,
+// or one key that is not acceptable, adds nobody.
+func (a *App) AddPerson(ctx context.Context, name, keysText string) (people.Person, error) {
+	return a.people.AddWithKeys(ctx, name, keysText)
+}
+
+// CheckPersonName says whether a person could be added with the name: nil, or why not
+// (PersonNameInvalid, PersonNameTaken). It changes nothing, so a UI can tell the name is wrong
+// before it asks for the keys.
+func (a *App) CheckPersonName(name string) error {
+	return a.people.CheckName(name)
 }
 
 // RenamePerson changes the login name of a person and disconnects them.

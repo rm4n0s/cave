@@ -329,10 +329,7 @@ func TestEveryErrorOfAPasteIsShown(t *testing.T) {
 
 func TestAddAKeyConnectWithItAndRemoveIt(t *testing.T) {
 	r := apptest.Open(t, nil)
-	p, err := r.App.AddPerson(ctx, "carol")
-	if err != nil {
-		t.Fatal(err)
-	}
+	p := r.Keyless("carol")
 	key := sshtest.NewKey(t, sshtest.Ed25519)
 	tester := pump(t, r.App, testutil.Wide, "people")
 	sync := func(what string, cond func() bool) {

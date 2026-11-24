@@ -38,7 +38,7 @@ func moduleRoot(t *testing.T) string {
 func TestMessage(t *testing.T) {
 	f := newFixture(t, nil)
 	a := f.open(func(o *Options) { o.NoStart = true })
-	alice, err := a.AddPerson(ctx, "alice")
+	alice, err := a.people.Add(ctx, "alice") // without a key: AddKeys is what is tested
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,8 +79,8 @@ func TestMessage(t *testing.T) {
 	_, flagsPage := ParseFlags("tcave", []string{"--page", "home"})
 	_, root := Open(ctx, func() Options { o := f.options(); o.IsRoot = func() bool { return true }; return o }())
 
-	_, badName := a.AddPerson(ctx, "-bad")
-	_, takenName := a.AddPerson(ctx, "ALICE")
+	_, badName := a.AddPerson(ctx, "-bad", own.AuthorizedKey)
+	_, takenName := a.AddPerson(ctx, "ALICE", own.AuthorizedKey)
 	_, notFoundKeyText := a.AddKeys(ctx, alice.ID, "")
 	_, assigned := a.AddKeys(ctx, alice.ID, bobKey.AuthorizedKey)
 	_, privateKey := a.AddKeys(ctx, alice.ID, string(private))

@@ -91,6 +91,9 @@ func newFixture(t *testing.T, more map[string]any) *fixture {
 		string(settings.ServerAddress): "127.0.0.1", string(settings.ServerPort): f.port, string(settings.SessionShell): "/bin/sh",
 		// Off, so that a test may move the fake clock far in one step (see servertest).
 		string(settings.ServerKeepAliveSeconds): 0,
+		// The server does not start by itself unless the setting says so (it is off by default),
+		// and most tests need a server that runs: TestTheServerDoesNotStartByDefault leaves it off.
+		string(settings.ServerStartOnLaunch): true,
 	})
 	f.save(more)
 	return f
@@ -152,12 +155,8 @@ func (f *fixture) close(a *App) {
 // person adds a person with a new key, through the commands.
 func (f *fixture) person(a *App, name string) sshtest.Key {
 	f.t.Helper()
-	p, err := a.AddPerson(ctx, name)
-	if err != nil {
-		f.t.Fatal(err)
-	}
 	key := sshtest.NewKey(f.t, sshtest.Ed25519)
-	if _, err := a.AddKeys(ctx, p.ID, key.AuthorizedKey); err != nil {
+	if _, err := a.AddPerson(ctx, name, key.AuthorizedKey); err != nil {
 		f.t.Fatal(err)
 	}
 	return key
@@ -323,6 +322,28 @@ func TestNoStart(t *testing.T) {
 	if srv := a.Server(); srv.State != server.Stopped || taken(f.port) || srv.Port != f.port {
 		t.Fatalf("with --no-start the server is %+v", srv)
 	}
+	if err := a.StartServer(ctx); err != nil {
+		t.Fatal(err)
+	}
+	if srv := a.Server(); srv.State != server.Running {
+		t.Errorf("after StartServer the server is %+v", srv)
+	}
+}
+
+func TestTheServerDoesNotStartByDefault(t *testing.T) {
+	// Only the address and the port are saved: the setting of starting at launch is what a
+	// new installation has.
+	f := &fixture{t: t, dirs: storagetest.Isolate(t), clock: clock.NewFake(start), log: &syncBuffer{}, port: freePort(t)}
+	f.save(map[string]any{string(settings.ServerAddress): "127.0.0.1", string(settings.ServerPort): f.port})
+	a := f.open(nil)
+	if srv := a.Server(); srv.State != server.Stopped || len(srv.Listening) != 0 {
+		t.Fatalf("a new installation opened with the server %+v, want it stopped", srv)
+	}
+	if conn, err := net.DialTimeout("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(f.port)), time.Second); err == nil {
+		_ = conn.Close() // only a probe
+		t.Fatal("something listens on the port of a new installation")
+	}
+	// Started by the user, it runs.
 	if err := a.StartServer(ctx); err != nil {
 		t.Fatal(err)
 	}

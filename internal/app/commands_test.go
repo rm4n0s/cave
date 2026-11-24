@@ -41,7 +41,8 @@ func TestPeopleCommands(t *testing.T) {
 	var got events
 	a.Subscribe(got.add)
 
-	alice, err := a.AddPerson(ctx, "alice")
+	key := sshtest.NewKey(t, sshtest.Ed25519)
+	alice, err := a.AddPerson(ctx, "alice", key.AuthorizedKey+" laptop")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -49,15 +50,10 @@ func TestPeopleCommands(t *testing.T) {
 	if topics := got.take(); len(topics) != 1 || !topics[0].Has(TopicPeople) {
 		t.Errorf("after AddPerson the subscriber got %v, want one event with the people", topics)
 	}
-	if list := a.People(); len(list) != 1 || list[0].Name != "alice" || !list[0].Enabled || len(list[0].Keys) != 0 {
-		t.Fatalf("People() = %+v", list)
+	if list := a.People(); len(list) != 1 || list[0].Name != "alice" || !list[0].Enabled || len(list[0].Keys) != 1 || list[0].Keys[0].Comment != "laptop" {
+		t.Fatalf("People() = %+v, want alice with her key", list)
 	}
-
-	key := sshtest.NewKey(t, sshtest.Ed25519)
-	keys, err := a.AddKeys(ctx, alice.ID, key.AuthorizedKey+" laptop")
-	if err != nil || len(keys) != 1 {
-		t.Fatalf("AddKeys = %v, %v", keys, err)
-	}
+	keys := alice.Keys
 	if err := a.SetKeyComment(ctx, alice.ID, keys[0].ID, "desk"); err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +84,7 @@ func TestPeopleCommands(t *testing.T) {
 func TestImportKeys(t *testing.T) {
 	f := newFixture(t, nil)
 	a := f.open(func(o *Options) { o.NoStart = true })
-	p, err := a.AddPerson(ctx, "alice")
+	p, err := a.people.Add(ctx, "alice") // without a key: ImportKeys is what is tested
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -110,11 +106,12 @@ func TestImportKeys(t *testing.T) {
 func TestCommandErrors(t *testing.T) {
 	f := newFixture(t, nil)
 	a := f.open(func(o *Options) { o.NoStart = true })
-	alice, err := a.AddPerson(ctx, "alice")
+	alice, err := a.people.Add(ctx, "alice") // without a key: AddKeys is what is tested
 	if err != nil {
 		t.Fatal(err)
 	}
 	bobKey := f.person(a, "bob")
+	newKey := sshtest.NewKey(t, sshtest.Ed25519)
 	if _, err := a.AddKeys(ctx, alice.ID, ""); err == nil {
 		t.Fatal("empty text was accepted") // the route is checked in the table
 	}
@@ -124,8 +121,13 @@ func TestCommandErrors(t *testing.T) {
 		run   func() error
 		route []string
 	}{
-		{"a name that is not valid", func() error { _, err := a.AddPerson(ctx, "-bad"); return err }, []string{"App.AddPerson", "PersonNameInvalid"}},
-		{"a name that is taken, in another case", func() error { _, err := a.AddPerson(ctx, "Alice"); return err }, []string{"App.AddPerson", "PersonNameTaken"}},
+		{"a name that is not valid", func() error { _, err := a.AddPerson(ctx, "-bad", newKey.AuthorizedKey); return err }, []string{"App.AddPerson", "PersonNameInvalid"}},
+		{"a name that is taken, in another case", func() error { _, err := a.AddPerson(ctx, "Alice", newKey.AuthorizedKey); return err }, []string{"App.AddPerson", "PersonNameTaken"}},
+		{"a person without a key", func() error { _, err := a.AddPerson(ctx, "carol", ""); return err }, []string{"App.AddPerson", "KeyTextEmpty"}},
+		{"a person with a text that is not a key", func() error { _, err := a.AddPerson(ctx, "carol", "not a key"); return err }, []string{"App.AddPerson", "KeyParseFailed"}},
+		{"a person with a key that another person has", func() error { _, err := a.AddPerson(ctx, "carol", bobKey.AuthorizedKey); return err }, []string{"App.AddPerson", "KeyAlreadyAssigned"}},
+		{"a name to check that is not valid", func() error { return a.CheckPersonName("-bad") }, []string{"App.CheckPersonName", "PersonNameInvalid"}},
+		{"a name to check that is taken", func() error { return a.CheckPersonName("ALICE") }, []string{"App.CheckPersonName", "PersonNameTaken"}},
 		{"rename of nobody", func() error { return a.RenamePerson(ctx, nobody, "x") }, []string{"App.RenamePerson", "PersonNotFound"}},
 		{"enable nobody", func() error { return a.SetPersonEnabled(ctx, nobody, true) }, []string{"App.SetPersonEnabled", "PersonNotFound"}},
 		{"remove nobody", func() error { return a.RemovePerson(ctx, nobody) }, []string{"App.RemovePerson", "PersonNotFound"}},
@@ -315,5 +317,28 @@ func TestCountConnections(t *testing.T) {
 		if got := CountConnections(tt.conns, tt.personID, tt.keyID); got != tt.want {
 			t.Errorf("%s: CountConnections = %d, want %d", tt.name, got, tt.want)
 		}
+	}
+}
+
+func TestAPersonIsNotAddedWithoutAKey(t *testing.T) {
+	f := newFixture(t, nil)
+	a := f.open(func(o *Options) { o.NoStart = true })
+	f.clock.Advance(time.Second)
+	var got events
+	a.Subscribe(got.add)
+	taken := f.person(a, "bob")
+	f.clock.Advance(CoalesceTime)
+	got.take()
+	for name, text := range map[string]string{"no text": "", "a comment only": "# a key\n", "not a key": "hello", "a key of bob": taken.AuthorizedKey} {
+		if _, err := a.AddPerson(ctx, "carol", text); err == nil {
+			t.Errorf("%s: carol was added", name)
+		}
+	}
+	f.clock.Advance(CoalesceTime)
+	if list := a.People(); len(list) != 1 || list[0].Name != "bob" {
+		t.Errorf("People() = %+v, want only bob", list)
+	}
+	if topics := got.take(); len(topics) != 0 {
+		t.Errorf("a refused addition told the subscriber: %v", topics)
 	}
 }

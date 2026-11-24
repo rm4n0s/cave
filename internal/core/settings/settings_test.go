@@ -45,7 +45,7 @@ func TestDefaults(t *testing.T) {
 	want := map[string]any{
 		"server.port":             2222,
 		"server.address":          "",
-		"server.startOnLaunch":    true,
+		"server.startOnLaunch":    false,
 		"server.keepAliveSeconds": 60,
 		"attempts.clear":          "never",
 		"session.shell":           "",
@@ -133,7 +133,7 @@ func TestSetAndReopen(t *testing.T) {
 		{"server.port", 2022},
 		{"server.address", "127.0.0.1"},
 		{"server.address", "::1"},
-		{"server.startOnLaunch", false},
+		{"server.startOnLaunch", true},
 		{"server.keepAliveSeconds", 0},
 		{"attempts.clear", "weekly"},
 		{"session.shell", "/bin/zsh"},
@@ -162,7 +162,7 @@ func TestSetAndReopen(t *testing.T) {
 
 	reopened := open(t, dirs).Snapshot()
 	want := map[string]any{
-		"server.port": 2022, "server.address": "::1", "server.startOnLaunch": false, "server.keepAliveSeconds": 0,
+		"server.port": 2022, "server.address": "::1", "server.startOnLaunch": true, "server.keepAliveSeconds": 0,
 		"attempts.clear": "weekly", "session.shell": "/bin/zsh",
 		"session.acceptEnv":       []string{"LANG", "LC_*", "TERM_PROGRAM", "*"},
 		"forwarding.gatewayPorts": true, "ui.theme": "dark",

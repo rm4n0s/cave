@@ -36,6 +36,9 @@ type promptDone struct {
 	// failure is a sentence of the prompt's own for a text it could not use, such as "Type a
 	// number."; the prompt stays open with it, as it does for err.
 	failure string
+	// next, when it is set, runs on the model once the prompt has closed: the next question of
+	// a person who is being added, for instance.
+	next func(Model) Model
 }
 
 // openPrompt opens a prompt with a text in its field.

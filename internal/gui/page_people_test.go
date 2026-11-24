@@ -63,7 +63,7 @@ func TestGoldenPeople(t *testing.T) {
 	})
 	t.Run("add dialog with keys that failed light wide", func(t *testing.T) {
 		f := light(apptest.Sample(t), t)
-		f.Fail = map[string]error{"AddKeys": keyNotParsed()}
+		f.Fail = map[string]error{"AddPerson": keyNotParsed()}
 		tester := pump(t, f, testutil.Wide, "people")
 		tapKey(tester, addPersonButtonKey)
 		tester.EnterText(gluttertest.ByKey(fieldNameKey), "dave")
@@ -105,19 +105,6 @@ func TestTheRows(t *testing.T) {
 }
 
 func TestAddAPerson(t *testing.T) {
-	t.Run("a name", func(t *testing.T) {
-		f := apptest.Sample(t)
-		tester := pump(t, f, testutil.Wide, "people")
-		tapKey(tester, addPersonButtonKey)
-		tester.EnterText(gluttertest.ByKey(fieldNameKey), "dave")
-		tapKey(tester, formActionKey)
-		if got := f.Calls(); len(got) != 1 || got[0] != "AddPerson(dave)" {
-			t.Errorf("calls = %q, want [AddPerson(dave)]", got)
-		}
-		if err := gluttertest.FindsNothing(tester, gluttertest.ByKey(formActionKey)); err != nil {
-			t.Errorf("the dialog is still open: %v", err)
-		}
-	})
 	t.Run("a name and keys", func(t *testing.T) {
 		f := apptest.Sample(t)
 		tester := pump(t, f, testutil.Wide, "people")
@@ -125,9 +112,22 @@ func TestAddAPerson(t *testing.T) {
 		tester.EnterText(gluttertest.ByKey(fieldNameKey), "dave")
 		tester.EnterText(gluttertest.ByKey(fieldKeysKey), "ssh-ed25519 AAAA dave@laptop")
 		tapKey(tester, formActionKey)
-		want := []string{"AddPerson(dave)", `AddKeys(p_ffffffffffffffff, "ssh-ed25519 AAAA dave@laptop")`}
+		want := []string{`AddPerson(dave, "ssh-ed25519 AAAA dave@laptop")`}
 		if got := f.Calls(); strings.Join(got, "|") != strings.Join(want, "|") {
 			t.Errorf("calls = %q, want %q", got, want)
+		}
+		if err := gluttertest.FindsNothing(tester, gluttertest.ByKey(formActionKey)); err != nil {
+			t.Errorf("the dialog is still open: %v", err)
+		}
+	})
+	t.Run("the keys are not optional", func(t *testing.T) {
+		tester := pump(t, apptest.Sample(t), testutil.Wide, "people")
+		tapKey(tester, addPersonButtonKey)
+		if err := gluttertest.FindsNothing(tester, gluttertest.ByTextContaining("optional")); err != nil {
+			t.Errorf("the dialog says something is optional: %v", err)
+		}
+		if err := gluttertest.FindsOneWidget(tester, gluttertest.ByText("Public keys")); err != nil {
+			t.Error(err)
 		}
 	})
 	t.Run("a name that is taken keeps the dialog", func(t *testing.T) {
@@ -136,6 +136,7 @@ func TestAddAPerson(t *testing.T) {
 		tester := pump(t, f, testutil.Wide, "people")
 		tapKey(tester, addPersonButtonKey)
 		tester.EnterText(gluttertest.ByKey(fieldNameKey), "alice")
+		tester.EnterText(gluttertest.ByKey(fieldKeysKey), "ssh-ed25519 AAAA alice@laptop")
 		tapKey(tester, formActionKey)
 		if err := gluttertest.FindsOneWidget(tester, gluttertest.ByText(app.Message(nameTaken()))); err != nil {
 			t.Errorf("the sentence under the field: %v", err)
@@ -144,38 +145,46 @@ func TestAddAPerson(t *testing.T) {
 			t.Errorf("the dialog closed: %v", err)
 		}
 	})
-	t.Run("keys that fail keep the person and the dialog", func(t *testing.T) {
+	t.Run("keys that fail keep the dialog, and nobody is added", func(t *testing.T) {
 		f := apptest.Sample(t)
-		f.Fail = map[string]error{"AddKeys": keyNotParsed()}
+		f.Fail = map[string]error{"AddPerson": keyNotParsed()}
 		tester := pump(t, f, testutil.Wide, "people")
 		tapKey(tester, addPersonButtonKey)
 		tester.EnterText(gluttertest.ByKey(fieldNameKey), "dave")
 		tester.EnterText(gluttertest.ByKey(fieldKeysKey), "not a key")
 		tapKey(tester, formActionKey)
-		if err := gluttertest.FindsOneWidget(tester, gluttertest.ByText("dave was added. The keys were not:")); err != nil {
-			t.Error(err)
-		}
 		if err := gluttertest.FindsOneWidget(tester, gluttertest.ByText(app.Message(keyNotParsed()))); err != nil {
 			t.Error(err)
 		}
-		// Corrected and sent again, the keys go to the same person: the name is not added twice.
-		delete(f.Fail, "AddKeys")
+		if err := gluttertest.FindsOneWidget(tester, gluttertest.ByKey(formActionKey)); err != nil {
+			t.Errorf("the dialog closed: %v", err)
+		}
+		// Corrected and sent again, the person is added with the keys, in one call.
+		delete(f.Fail, "AddPerson")
 		tester.EnterText(gluttertest.ByKey(fieldKeysKey), "ssh-ed25519 AAAA dave@laptop")
 		tapKey(tester, formActionKey)
-		var adds, keys int
-		for _, c := range f.Calls() {
-			switch {
-			case strings.HasPrefix(c, "AddPerson("):
-				adds++
-			case strings.HasPrefix(c, "AddKeys("):
-				keys++
-			}
-		}
-		if adds != 1 || keys != 2 {
-			t.Errorf("calls = %q: %d AddPerson and %d AddKeys, want 1 and 2", f.Calls(), adds, keys)
+		want := []string{`AddPerson(dave, "not a key")`, `AddPerson(dave, "ssh-ed25519 AAAA dave@laptop")`}
+		if got := f.Calls(); strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Errorf("calls = %q, want %q", got, want)
 		}
 		if err := gluttertest.FindsNothing(tester, gluttertest.ByKey(formActionKey)); err != nil {
 			t.Errorf("the dialog is still open: %v", err)
+		}
+	})
+	t.Run("no keys is refused by the application, under the keys", func(t *testing.T) {
+		r := apptest.Open(t, nil)
+		tester := pump(t, r.App, testutil.Wide, "people")
+		tapKey(tester, addPersonButtonKey)
+		tester.EnterText(gluttertest.ByKey(fieldNameKey), "dave")
+		tapKey(tester, formActionKey)
+		eventually(t, tester, "the sentence of the empty keys", func() bool {
+			return tester.Exists(gluttertest.ByTextContaining("There is no public key in the text."))
+		})
+		if len(r.App.People()) != 0 {
+			t.Errorf("dave was added without a key: %+v", r.App.People())
+		}
+		if err := gluttertest.FindsOneWidget(tester, gluttertest.ByKey(formActionKey)); err != nil {
+			t.Errorf("the dialog closed: %v", err)
 		}
 	})
 	t.Run("cancel makes no call", func(t *testing.T) {

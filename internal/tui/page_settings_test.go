@@ -132,7 +132,7 @@ func TestSettingValuesAreWordedByKind(t *testing.T) {
 	for label, want := range map[string]string{
 		"Port":                          "2222",
 		"Address":                       "—",
-		"Start when Cave starts":        "on",
+		"Start when Cave starts":        "off",
 		"Keep-alive (seconds)":          "60",
 		"Clear the list":                "weekly",
 		"Shell":                         "—",
