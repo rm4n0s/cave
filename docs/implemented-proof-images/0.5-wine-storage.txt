@@ -1,0 +1,43 @@
+$ scripts/test-windows.sh -count=1 -v -run Lock\|Resolve ./internal/core/storage
+=== RUN   TestResolveRefusesRelativeFolders
+=== RUN   TestResolveRefusesRelativeFolders/a_relative_--config-dir
+=== RUN   TestResolveRefusesRelativeFolders/a_relative_--state-dir
+=== RUN   TestResolveRefusesRelativeFolders/a_relative_CAVE_CONFIG_DIR
+--- PASS: TestResolveRefusesRelativeFolders
+    --- PASS: TestResolveRefusesRelativeFolders/a_relative_--config-dir
+    --- PASS: TestResolveRefusesRelativeFolders/a_relative_--state-dir
+    --- PASS: TestResolveRefusesRelativeFolders/a_relative_CAVE_CONFIG_DIR
+=== RUN   TestLock
+=== RUN   TestLock/one_holder_at_a_time
+=== RUN   TestLock/different_folders_do_not_conflict
+=== RUN   TestLock/a_cancelled_context
+=== RUN   TestLock/a_state_folder_that_does_not_exist
+=== RUN   TestLock/the_lock_fails
+=== RUN   TestLock/the_holder_cannot_be_written
+=== RUN   TestLock/the_unlock_fails
+=== RUN   TestLock/the_close_fails
+--- PASS: TestLock
+    --- PASS: TestLock/one_holder_at_a_time
+    --- PASS: TestLock/different_folders_do_not_conflict
+    --- PASS: TestLock/a_cancelled_context
+    --- PASS: TestLock/a_state_folder_that_does_not_exist
+    --- PASS: TestLock/the_lock_fails
+    --- PASS: TestLock/the_holder_cannot_be_written
+    --- PASS: TestLock/the_unlock_fails
+    --- PASS: TestLock/the_close_fails
+=== RUN   TestResolveOnWindows
+=== RUN   TestResolveOnWindows/defaults_in_the_profile
+=== RUN   TestResolveOnWindows/the_CAVE__variables_win
+=== RUN   TestResolveOnWindows/the_flags_win_over_the_CAVE__variables
+=== RUN   TestResolveOnWindows/no_AppData
+=== RUN   TestResolveOnWindows/no_LocalAppData
+=== RUN   TestResolveOnWindows/a_relative_flag
+--- PASS: TestResolveOnWindows
+    --- PASS: TestResolveOnWindows/defaults_in_the_profile
+    --- PASS: TestResolveOnWindows/the_CAVE__variables_win
+    --- PASS: TestResolveOnWindows/the_flags_win_over_the_CAVE__variables
+    --- PASS: TestResolveOnWindows/no_AppData
+    --- PASS: TestResolveOnWindows/no_LocalAppData
+    --- PASS: TestResolveOnWindows/a_relative_flag
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/storage

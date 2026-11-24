@@ -60,3 +60,14 @@ One entry per finished step of `docs/IMPLEMENTATION.md`, newest last. Format:
 - **Proof**: none
 - **Manual checks**: none
 - **Glutter issues**: none
+
+## Step 0.5: Scripts for isolation, transcripts and Wine
+- **Date**: 2026-11-24
+- **Branch**: feat/step-0.5-scripts
+- **Summary**: `scripts/isolated.sh` runs a command with Cave's folders, the home, the XDG folders and the runtime folder in a temporary folder and without the user's SSH agent; `scripts/transcript.sh` saves a command's output as a stable proof; `scripts/headless-wayland.sh`, `scripts/headless-x11.sh`, `scripts/wine-exec.sh` and `scripts/test-windows.sh` are Cave's copies of Glutter's scripts. `scripts/checks.sh` now runs the Windows tests under Wine. `devVersion` is `0.2.0-dev`: this is the last step of M0, published as `v0.1.0`.
+- **Decisions**: `scripts/wine-exec.sh` forces Mesa's software renderer (`LIBGL_ALWAYS_SOFTWARE`, Mesa's EGL and GLX vendors): Wine's X driver starts EGL even for a console program, and without this it probed the NVIDIA card. `scripts/isolated.sh` also unsets `SSH_ASKPASS`, and exports `CAVE_ISOLATED_ROOT`. A transcript is written only when its command succeeds.
+- **Checks**: `scripts/checks.sh` passed, every check: gofmt, vet for Linux and Windows, golangci-lint (0 issues), race tests as a debug build, cgo-free build and tests, Windows build, error tags (none untested), and the tests under Wine (`internal/core/storage`). `pgrep` shows no Wine, Xvfb or compositor left.
+- **Tests**: `scripts/isolated.sh` through a Go test: every variable points into the private folder, the SSH variables are gone, the folders have mode 700 and are removed, a fixture becomes the configuration, the exit status is kept, `--keep`, usage mistakes; `scripts/transcript.sh`: durations, ports and temporary paths are taken out, a failing command writes nothing. Under Wine (wine-11.21): the Windows tests of `internal/core/storage` pass, including the lock through `LockFileEx` and the `%AppData%` resolution.
+- **Proof**: [0.5-wine-storage.txt](implemented-proof-images/0.5-wine-storage.txt), the transcript of the storage tests under Wine.
+- **Manual checks**: none
+- **Glutter issues**: none
