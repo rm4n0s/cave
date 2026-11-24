@@ -27,11 +27,22 @@ type opensshFixture struct {
 // newOpenSSHFixture starts the server and prepares OpenSSH; it skips the test without OpenSSH.
 func newOpenSSHFixture(t *testing.T) *opensshFixture {
 	t.Helper()
+	return newOpenSSHFixtureWith(t, "")
+}
+
+// newOpenSSHFixtureWith is newOpenSSHFixture with the folder for the sockets of forwarded
+// agents, whose path must be short; "" is the fixture's own runtime folder.
+func newOpenSSHFixtureWith(t *testing.T, runtimeDir string) *opensshFixture {
+	t.Helper()
 	sshtest.Require(t)
 	f := servertest.New(t)
 	// The sessions run /bin/sh in the isolated home, never the user's own shell or home.
 	f.Set(string(settings.SessionShell), "/bin/sh")
-	Register(f.Server, options(f))
+	opts := options(f)
+	if runtimeDir != "" {
+		opts.RuntimeDir = runtimeDir
+	}
+	Register(f.Server, opts)
 	f.Start()
 	_, key := f.Person("alice")
 	return &opensshFixture{Fixture: f, ssh: f.OpenSSH(), key: key}

@@ -1,0 +1,32 @@
+$ go test -v -count=1 -run OpenSSH\(Local\|Dynamic\|Remote\|Agent\) ./internal/core/forward ./internal/core/session
+=== RUN   TestOpenSSHLocalForward
+    openssh_test.go:67: $ ssh -N -o ExitOnForwardFailure=yes -L <tmp>/local.sock:127.0.0.1:<port> alice@127.0.0.1 &
+    openssh_test.go:83: a message went through the forward to the echo server on 127.0.0.1 and came back; the registry showed the forward
+--- PASS: TestOpenSSHLocalForward
+=== RUN   TestOpenSSHDynamicForward
+    openssh_test.go:94: $ ssh -N -o ExitOnForwardFailure=yes -D <tmp>/socks.sock alice@127.0.0.1 &
+    openssh_test.go:123: a SOCKS5 request for the echo server on 127.0.0.1 was answered, and a message came back through it
+--- PASS: TestOpenSSHDynamicForward
+=== RUN   TestOpenSSHLocalForwardIsRefusedWhenTurnedOff
+    openssh_test.go:137: $ ssh -N -L <tmp>/local.sock:127.0.0.1:<port> alice@127.0.0.1 &
+    openssh_test.go:160: with forwarding.local off nothing came through, the echo server got no connection, and Cave logged the refusal
+--- PASS: TestOpenSSHLocalForwardIsRefusedWhenTurnedOff
+=== RUN   TestOpenSSHRemoteForward
+    openssh_test.go:173: $ ssh -N -o ExitOnForwardFailure=yes -R 0:127.0.0.1:<port> alice@127.0.0.1 &
+    openssh_test.go:197: Cave listened on a port of 127.0.0.1 for ssh; a message sent there reached the echo server behind ssh and came back
+--- PASS: TestOpenSSHRemoteForward
+=== RUN   TestOpenSSHRemoteForwardIsRefusedWhenTurnedOff
+    openssh_test.go:213: $ ssh -N -o ExitOnForwardFailure=yes -R 0:127.0.0.1:<port> alice@127.0.0.1  (exit status 255)
+    openssh_test.go:221: with forwarding.remote off, ssh reports: Error: remote port forwarding failed for listen port 0
+--- PASS: TestOpenSSHRemoteForwardIsRefusedWhenTurnedOff
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/forward
+=== RUN   TestOpenSSHAgentForwarding
+    agent_session_linux_test.go:330: $ ssh -A alice@127.0.0.1 ssh-add -l; echo "status=$?"; test -S "$SSH_AUTH_SOCK" && echo "a socket"  (exit status 0)
+    agent_session_linux_test.go:334: in the session, ssh-add -l listed the key that only the client's agent has
+    agent_session_linux_test.go:337: $ ssh alice@127.0.0.1 echo "sock=$SSH_AUTH_SOCK"  (exit status 0)
+    agent_session_linux_test.go:343: $ ssh -A alice@127.0.0.1 echo "sock=$SSH_AUTH_SOCK"  (exit status 0)
+    agent_session_linux_test.go:347: without -A, and with forwarding.agent off, the session has no SSH_AUTH_SOCK
+--- PASS: TestOpenSSHAgentForwarding
+PASS
+ok  	github.com/rm4n0s/cave/internal/core/session

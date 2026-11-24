@@ -41,7 +41,7 @@ func caveEnv(f *servertest.Fixture) []string {
 
 // options are the handler's options for a fixture: the isolated home, and /bin/sh as the shell.
 func options(f *servertest.Fixture) Options {
-	return Options{Settings: f.Settings, Logger: f.Logger, User: User{Name: "tester", Home: f.Home}, Environ: caveEnv(f)}
+	return Options{Settings: f.Settings, Logger: f.Logger, User: User{Name: "tester", Home: f.Home}, Environ: caveEnv(f), RuntimeDir: f.Dirs.Runtime}
 }
 
 // newFixture starts a server with the session handler and connects alice.

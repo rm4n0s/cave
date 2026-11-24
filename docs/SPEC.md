@@ -364,6 +364,11 @@ Version 3 of the protocol (draft-ietf-secsh-filexfer-02), as OpenSSH's `sftp-ser
   - With `forwarding.remote` off the request is refused; a forward that is there stays. A port that cannot be listened on (taken, or below 1024 without the right) is refused and logged (`ForwardListenFailed`). A listener that fails later is closed and logged (`ForwardAcceptFailed`).
   - The registry shows each listener as `remote-forward` with the address and port Cave really listens on.
 - **Agent** (`auth-agent-req@openssh.com`): when `forwarding.agent` is on, the session gets a private socket (Linux: `agent.sock` in a new `0700` folder under the runtime folder, the socket `0600`) whose connections are carried to the client over `auth-agent@openssh.com` channels. The socket is removed when the session ends.
+  - The request is granted once per channel, before `shell` or `exec`, and sets `SSH_AUTH_SOCK` of the process to the socket. With `forwarding.agent` off it is refused and the session runs without the variable. Cave's own `SSH_AUTH_SOCK` never reaches a session, with or without forwarding (§9.5).
+  - Each program that connects to the socket gets a channel of its own to the client's agent; at most 32 at once per session, one more is closed as it arrives. When the client does not open the channel (it has no agent), the program sees the socket close, and the refusal is logged (`AgentOpenFailed`).
+  - The socket and its folder are removed when the channel ends, the connection ends or Cave stops. A socket that cannot be made (`AgentRuntimeDirFailed`, `AgentDirFailed`, `AgentListenFailed`, `AgentModeFailed`) refuses the request, and the error is logged.
+  - The registry shows `agent` for the session while the socket exists.
+  - **Who can reach a forwarded agent.** Every session runs as the one OS user who started Cave, so the modes keep other users of the computer out, but not the user's own programs and not the sessions of other people who are connected at the same time. A person who forwards an agent to Cave trusts the person who runs Cave, as with any SSH server and its administrator, and also whoever else that person lets in. The setting's description in both UIs and the manual say so.
 
 ### 9.9 Keepalive
 

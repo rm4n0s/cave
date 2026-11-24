@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rm4n0s/cave/internal/core/agentfwd"
 	"github.com/rm4n0s/cave/internal/core/pty"
 	"github.com/rm4n0s/cave/internal/core/sanitize"
 	"github.com/rm4n0s/cave/internal/core/server"
@@ -44,7 +45,7 @@ const (
 
 // Options are what the session handler needs. Every field is required.
 type Options struct {
-	// Settings has session.shell, session.acceptEnv and sftp.enabled.
+	// Settings has session.shell, session.acceptEnv, sftp.enabled and forwarding.agent.
 	Settings *settings.Store
 	// Logger gets the starts and ends of sessions.
 	Logger *slog.Logger
@@ -52,6 +53,8 @@ type Options struct {
 	User User
 	// Environ is Cave's own environment, as os.Environ gives it.
 	Environ []string
+	// RuntimeDir is where the sockets of forwarded agents are made (storage.Dirs.Runtime).
+	RuntimeDir string
 }
 
 // handler serves session channels.
@@ -85,6 +88,10 @@ type session struct {
 	// pty is the session's pseudo terminal, and term its type; nil and "" without a pty-req.
 	pty  *pty.Pty
 	term string
+	// agent is where the session finds the client's agent; nil without agent forwarding.
+	agent *agentfwd.Socket
+	// agentShown takes the agent forwarding out of the registry.
+	agentShown func()
 	// ctx ends when the connection does.
 	ctx context.Context
 	// started says that the channel had its one start: a shell, a command or a subsystem,
@@ -120,6 +127,11 @@ func (h *handler) serve(ctx context.Context, conn *server.Conn, newChannel ssh.N
 		// gone: the system sends it SIGHUP.
 		if s.pty != nil {
 			_ = s.pty.Close()
+		}
+		// The agent was forwarded to this session, and goes with it.
+		if s.agent != nil {
+			s.agent.Close()
+			s.agentShown()
 		}
 	}()
 	for {
@@ -169,6 +181,8 @@ func (s *session) request(request *ssh.Request) {
 		if err := ssh.Unmarshal(request.Payload, &size); err == nil && s.pty != nil {
 			ok = s.pty.Resize(pty.Size{Cols: size.Cols, Rows: size.Rows, Width: size.Width, Height: size.Height}) == nil
 		}
+	case "auth-agent-req@openssh.com":
+		ok = s.requestAgent()
 	case "subsystem":
 		var payload struct{ Name string }
 		if err := ssh.Unmarshal(request.Payload, &payload); err == nil {
@@ -176,7 +190,6 @@ func (s *session) request(request *ssh.Request) {
 		}
 	case "break":
 		ok = true
-		// TODO(step 3.5): auth-agent-req@openssh.com.
 	}
 	if request.WantReply {
 		_ = request.Reply(ok, nil) // a reply that cannot be sent means the channel is gone
@@ -232,6 +245,37 @@ func (s *session) requestPty(payload []byte) bool {
 	return true
 }
 
+// requestAgent handles auth-agent-req@openssh.com: the session to come finds the client's agent
+// at a socket of its own (docs/SPEC.md §9.8). It is granted once per channel, before the start,
+// when forwarding.agent is on.
+func (s *session) requestAgent() bool {
+	if s.started || s.agent != nil {
+		return false
+	}
+	logger := s.h.opts.Logger.With("connection", s.conn.ID(), "person", s.conn.PersonName())
+	if !s.h.opts.Settings.Snapshot().Bool(settings.ForwardingAgent) {
+		logger.Info("agent forwarding refused", "reason", "forwarding.agent is off")
+		return false
+	}
+	socket, err := agentfwd.Listen(s.ctx, agentfwd.Options{
+		RuntimeDir: s.h.opts.RuntimeDir, Logger: logger,
+		Open: func() (io.ReadWriteCloser, error) {
+			channel, requests, err := s.conn.SSH().OpenChannel("auth-agent@openssh.com", nil)
+			if err != nil {
+				return nil, err
+			}
+			go ssh.DiscardRequests(requests)
+			return channel, nil
+		},
+	})
+	if err != nil {
+		logger.Warn("agent forwarding refused", "err", err)
+		return false
+	}
+	s.agent, s.agentShown = socket, s.conn.AddActivity(server.ActivityAgent, "")
+	return true
+}
+
 // validTerm says whether a terminal type may go into TERM: printable ASCII without spaces, of a
 // sane length. An empty type is allowed, and sets no TERM.
 func validTerm(term string) bool {
@@ -263,6 +307,9 @@ func (s *session) start(command string, login bool) bool {
 	}
 	if s.pty != nil {
 		in.Term, in.TTY = s.term, s.pty.Name()
+	}
+	if s.agent != nil {
+		in.AuthSock = s.agent.Path()
 	}
 	env := BuildEnv(in)
 	kind, detail := server.ActivityExec, command
