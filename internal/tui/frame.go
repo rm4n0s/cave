@@ -94,11 +94,20 @@ func (m Model) tabs() string {
 // lines.
 func (m Model) body(height int) []string {
 	var lines []string
-	if m.ask != nil {
+	switch {
+	case m.ask != nil:
 		lines = m.ask.q.view(m.width, height, m.st)
-	} else if m.help {
+	case m.help:
 		lines = m.helpLines()
-	} else {
+	case m.prompt != nil:
+		// The page is drawn above the prompt, which has the last lines of the body.
+		own := m.prompt.view(m.width, m.st)
+		lines = m.pageLines(height - len(own))
+		for len(lines) < height-len(own) {
+			lines = append(lines, "")
+		}
+		lines = append(lines[:height-len(own)], own...)
+	default:
 		lines = m.pageLines(height)
 	}
 	if len(lines) > height {
@@ -115,6 +124,8 @@ func (m Model) pageLines(height int) []string {
 	switch m.page {
 	case pageOverview:
 		return m.overviewLines(height)
+	case pagePeople:
+		return m.peopleLines(height)
 	}
 	return []string{m.st.title.Render(m.page.title())}
 }
@@ -156,6 +167,9 @@ func (m Model) messageLine() string {
 
 // footer is the last line: the keys of the page, then the two that are always there.
 func (m Model) footer() string {
+	if m.prompt != nil {
+		return m.st.key.Render("enter") + " ok   " + m.st.key.Render("esc") + " cancel"
+	}
 	if m.ask != nil {
 		return m.st.key.Render("y") + " " + m.ask.q.yes + "   " + m.st.key.Render("n") + " cancel"
 	}

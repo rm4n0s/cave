@@ -1,0 +1,30 @@
+Cave   stopped                                                              0 connected · 0 attempts
+1 Overview  [2 People]  3 Attempts  4 Connections  5 Settings                                       
+────────────────────────────────────────────────────────────────────────────────────────────────────
+  Name                                                                        Keys Enabled Connected
+  Nobody yet. Press a to add a person.                                                              
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                    
+a add   e rename   space on/off   d remove   ? keys   q quit                                        

@@ -27,4 +27,8 @@ type App interface {
 	Subscribe(fn func(app.Event)) (cancel func())
 	StartServer(ctx context.Context) error
 	StopServer(ctx context.Context) error
+	AddPerson(ctx context.Context, name string) (people.Person, error)
+	RenamePerson(ctx context.Context, id, name string) error
+	SetPersonEnabled(ctx context.Context, id string, enabled bool) error
+	RemovePerson(ctx context.Context, id string) error
 }

@@ -54,6 +54,7 @@ func globalBindings() []binding {
 		{"1-5", "go to a page"},
 		{"tab", "next page"},
 		{"shift+tab", "previous page"},
+		{"up/down pgup/pgdn", "move in a list"},
 		{"s", "start or stop the server"},
 		{"?", "show or hide the keys"},
 		{"q", "quit"},
@@ -67,7 +68,9 @@ func pageBindings(p page) []binding {
 	switch p {
 	case pageOverview:
 		return []binding{{"s", "start or stop the server"}}
-	case pagePeople, pageAttempts, pageConnections, pageSettings:
+	case pagePeople:
+		return []binding{{"a", "add"}, {"e", "rename"}, {"space", "on/off"}, {"d", "remove"}}
+	case pageAttempts, pageConnections, pageSettings:
 		return nil
 	}
 	return nil

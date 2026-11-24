@@ -62,6 +62,15 @@ type Model struct {
 	help          bool
 	// ask is the question that is open, nil when there is none. It gets every key.
 	ask *asking
+	// prompt is the text field that is open, nil when there is none. It gets every key too.
+	prompt    *prompt
+	promptSeq int
+
+	// The People page: the selection, the person it is on (so that it stays on them when the list
+	// changes) and the person to select as soon as they are in the list.
+	peopleList   list
+	peopleSel    string
+	peopleWanted string
 	// message is the text of the message line; messageErr says that it is an error.
 	message    string
 	messageErr bool
@@ -89,6 +98,7 @@ func (m *Model) refresh() {
 	m.attempts = m.app.Attempts()
 	m.connections = m.app.Connections()
 	m.settings = m.app.Settings()
+	m.syncPeople()
 }
 
 // Init starts nothing: the program sends the size by itself.
@@ -101,6 +111,7 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
+		m.peopleList.setHeight(m.height - chrome - 1)
 	case changedMsg, tickMsg:
 		m.refresh()
 	case doneMsg:
@@ -109,10 +120,36 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		} else {
 			m.message, m.messageErr = app.Message(msg.err), true
 		}
+	case promptDone:
+		m = m.promptEnded(msg)
+	case tea.PasteMsg:
+		if m.prompt != nil {
+			m = m.pastePrompt(msg.Content)
+		}
 	case tea.KeyPressMsg:
 		return m.key(msg)
 	}
 	return m, nil
+}
+
+// promptEnded is what the end of a prompt's command does: close the prompt, or show why it
+// failed. The end of a prompt that was closed meanwhile is ignored.
+func (m Model) promptEnded(done promptDone) Model {
+	if m.prompt == nil || m.prompt.id != done.id {
+		return m
+	}
+	if done.err != nil {
+		p := *m.prompt
+		p.err, p.busy = app.Message(done.err), false
+		m.prompt = &p
+		return m
+	}
+	m.prompt = nil
+	if done.selectID != "" {
+		m.peopleWanted = done.selectID
+		m.syncPeople()
+	}
+	return m
 }
 
 // key handles a key press.
@@ -120,6 +157,9 @@ func (m Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	name := msg.String()
 	if m.ask != nil {
 		return m.keyAsked(msg)
+	}
+	if m.prompt != nil {
+		return m.keyPrompt(msg)
 	}
 	m.message, m.messageErr = "", false
 	if name == "ctrl+c" {
@@ -143,6 +183,10 @@ func (m Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		m.page = (m.page + pageCount - 1) % pageCount
 	case "s":
 		return m, m.toggleServer()
+	default:
+		if m.page == pagePeople {
+			return m.keyPeople(msg)
+		}
 	}
 	return m, nil
 }

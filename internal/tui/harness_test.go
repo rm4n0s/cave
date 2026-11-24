@@ -11,6 +11,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/rm4n0s/cave/internal/app/apptest"
+	"github.com/rm4n0s/cave/internal/core/clock"
 )
 
 // updateGoldens rewrites the golden files instead of comparing with them:
@@ -29,9 +30,9 @@ type harness struct {
 }
 
 // newHarness makes the model over the application and gives it the size of the terminal.
-func newHarness(t *testing.T, a App, clockOf *apptest.Fake, width, height int) *harness {
+func newHarness(t *testing.T, a App, clk clock.Clock, width, height int) *harness {
 	t.Helper()
-	h := &harness{t: t, model: NewModel(ctx, a, clockOf.Clock, Options{})}
+	h := &harness{t: t, model: NewModel(ctx, a, clk, Options{})}
 	h.resize(width, height)
 	return h
 }
@@ -39,7 +40,7 @@ func newHarness(t *testing.T, a App, clockOf *apptest.Fake, width, height int) *
 // newFakeHarness is newHarness for a fake application.
 func newFakeHarness(t *testing.T, f *apptest.Fake, width, height int) *harness {
 	t.Helper()
-	return newHarness(t, f, f, width, height)
+	return newHarness(t, f, f.Clock, width, height)
 }
 
 // m returns the model as its own type.
@@ -124,6 +125,20 @@ func (h *harness) keys(names ...string) {
 	for _, name := range names {
 		h.key(name)
 	}
+}
+
+// typeText sends one key press for each character of text.
+func (h *harness) typeText(text string) {
+	h.t.Helper()
+	for _, r := range text {
+		h.send(tea.KeyPressMsg{Code: r, Text: string(r)})
+	}
+}
+
+// paste sends pasted text.
+func (h *harness) paste(text string) {
+	h.t.Helper()
+	h.send(tea.PasteMsg{Content: text})
 }
 
 // resize sends the size of the terminal.
