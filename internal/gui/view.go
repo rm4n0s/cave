@@ -1,6 +1,7 @@
 package gui
 
 import (
+	"context"
 	"time"
 
 	"github.com/rm4n0s/cave/internal/app"
@@ -14,6 +15,8 @@ import (
 // ways to change them. It is never changed after it is made; the root makes a new one when
 // something changes, so the widgets below compare pointers.
 type view struct {
+	// ctx ends when the window closes; a request to the system (the clipboard) takes it.
+	ctx         context.Context
 	app         App
 	run         runner
 	server      app.ServerSnapshot
@@ -27,7 +30,12 @@ type view struct {
 	page int
 	// selectPage shows another page (the index in app.Pages).
 	selectPage func(page int)
-	opts       Options
+	// showSettings shows the Settings page scrolled to the group with the name (one of the Group
+	// constants of internal/app).
+	showSettings func(group string)
+	// settingsGroup is the group the Settings page scrolls to when it is shown; "" for none.
+	settingsGroup string
+	opts          Options
 }
 
 // with returns a copy of the view with the snapshots of the topics read again.

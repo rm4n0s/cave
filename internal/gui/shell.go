@@ -113,6 +113,8 @@ func pageFor(v *view) m.Widget {
 		return newAttemptsPage(v)
 	case pageConnections:
 		return newConnectionsPage(v)
+	case pageSettings:
+		return newSettingsPage(v)
 	}
 	return newHeadline(destinations[v.page].label)
 }

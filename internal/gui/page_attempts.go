@@ -189,7 +189,7 @@ func (s *attemptsState) info(bc m.BuildContext, v *view) m.Widget {
 	return m.NewRow([]m.Widget{
 		m.NewText(text, m.TextOpts{Key: foundation.NewKey("attempts-info"), Style: m.ThemeOf(bc).TextTheme.BodyMedium}),
 		hgap(8),
-		m.NewTextButton(func() { v.selectPage(pageSettings) }, m.NewText("Change…"), m.TextButtonOpts{Key: changeClearKey}),
+		m.NewTextButton(func() { v.showSettings(app.GroupAttempts) }, m.NewText("Change…"), m.TextButtonOpts{Key: changeClearKey}),
 	})
 }
 

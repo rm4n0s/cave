@@ -45,6 +45,18 @@ func (f first) Find(t *gluttertest.Tester) []widgets.Element {
 	return found
 }
 
+// last finds only the last of what the finder finds: a dropdown keeps a copy of its entries to
+// measure them, before the entries of the open menu, so the entry to tap is the last.
+type last struct{ gluttertest.Finder }
+
+func (f last) Find(t *gluttertest.Tester) []widgets.Element {
+	found := f.Finder.Find(t)
+	if len(found) > 1 {
+		found = found[len(found)-1:]
+	}
+	return found
+}
+
 // pickRow selects the entry with the address by tapping a cell of its row.
 func pickRow(tester *gluttertest.Tester, address string) {
 	tester.Tap(gluttertest.ByText(address))

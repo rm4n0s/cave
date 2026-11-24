@@ -60,7 +60,10 @@ func (s *rootState) InitState() {
 		s.clock = clock.System()
 	}
 	s.post = binding.Post
-	s.v = (&view{app: w.a, run: run, now: s.clock.Now(), page: page, selectPage: s.selectPage, opts: w.opts}).
+	s.v = (&view{
+		ctx: ctx, app: w.a, run: run, now: s.clock.Now(), page: page,
+		selectPage: s.selectPage, showSettings: s.showSettings, opts: w.opts,
+	}).
 		with(app.TopicServer | app.TopicPeople | app.TopicAttempts | app.TopicConnections | app.TopicSettings)
 	s.timer = s.clock.AfterFunc(tickEvery, s.tick)
 	// The application tells its changes on its own goroutines: the work is handed to the UI thread.
@@ -115,7 +118,16 @@ func (s *rootState) selectPage(page int) {
 	}
 	s.SetState(func() {
 		c := *s.v
-		c.page = page
+		c.page, c.settingsGroup = page, ""
+		s.v = &c
+	})
+}
+
+// showSettings shows the Settings page, scrolled to a group of settings.
+func (s *rootState) showSettings(group string) {
+	s.SetState(func() {
+		c := *s.v
+		c.page, c.settingsGroup = pageSettings, group
 		s.v = &c
 	})
 }
