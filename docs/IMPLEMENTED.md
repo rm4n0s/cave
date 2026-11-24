@@ -280,3 +280,14 @@ One entry per finished step of `docs/IMPLEMENTATION.md`, newest last. Format:
 - **Proof**: none
 - **Manual checks**: none
 - **Glutter issues**: none
+
+## Step 4.4: Words both UIs share
+- **Date**: 2026-11-24
+- **Branch**: feat/step-4.4-words
+- **Summary**: `internal/app/words.go`: `ResultText`, `Who`, `Ago`, `Until`, `ActivitiesText` and `QuitQuestion`, pure functions that take the time as an argument; `internal/app/settings_text.go`: `SettingText`, the group constants and `SettingTexts()` with the group, label and one-line explanation of every setting, and which of them are desktop-only. The explanation of `forwarding.agent` says who can reach a forwarded agent (SPEC §9.8).
+- **Decisions**: `Until` rounds up (a time still ahead never shows as "in 0 min", and 59 minutes 59 seconds shows as "in 60 min"); `Ago` rounds down and shows a time that is after now as "just now". Several sftp sessions are "2 sftp sessions"; each forward is listed on its own with its detail. `ActivitiesText` shows an activity kind it does not know by its name, made safe.
+- **Checks**: `scripts/checks.sh` passed, every check (gofmt, vet for Linux and Windows, golangci-lint 0 issues, race tests as a debug build, cgo-free build and tests, Windows build, error tags: none untested, the Wine run).
+- **Tests**: tables for each function with every boundary of `Ago` and `Until` (0 s, 59 s, 60 s, 59 min 59 s, 1 h, 23 h 59 min, 24 h, 29 d, 30 d, a time ahead, a zero time); the eight results, an unknown one and one with a control character; every kind of activity, counts, the order, an unsafe detail; the quit question for none, one, one with two connections and three; every setting of the schema has one text in the schema's order and in the order of the groups, the desktop-only ones are the four notification and appearance settings, the agent explanation, and the table is returned as a copy.
+- **Proof**: none
+- **Manual checks**: none
+- **Glutter issues**: none
