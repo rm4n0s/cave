@@ -1,0 +1,27 @@
+// Package gui is Cave's desktop UI (docs/SPEC.md §11), built on Glutter. It calls only
+// internal/app, through the interface App, so that it is tested over a fake application with
+// fixed content or a real one in a temporary folder (internal/app/apptest).
+//
+// One stateful widget at the top, the root, holds the snapshots of the application and the
+// current page, and hands them down through an inherited widget. A command of the application
+// never runs on the UI thread: it goes through a runner, which starts it away from the UI
+// thread and gives its error back on it. Only Glutter's UI thread touches widgets.
+package gui
+
+import (
+	"github.com/rm4n0s/cave/internal/app"
+	"github.com/rm4n0s/cave/internal/core/people"
+	"github.com/rm4n0s/cave/internal/core/server"
+	"github.com/rm4n0s/cave/internal/core/settings"
+)
+
+// App is what the desktop UI calls of the application. *app.App and apptest.Fake are both one.
+// Later steps add the commands they need.
+type App interface {
+	Server() app.ServerSnapshot
+	People() []people.Person
+	Attempts() app.AttemptsSnapshot
+	Connections() []server.Connection
+	Settings() settings.Snapshot
+	Subscribe(fn func(app.Event)) (cancel func())
+}

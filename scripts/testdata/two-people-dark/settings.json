@@ -1,0 +1,8 @@
+{
+ "version": 1,
+ "settings": {
+  "server.address": "127.0.0.1",
+  "session.shell": "/bin/sh",
+  "ui.theme": "dark"
+ }
+}
