@@ -1,3 +1,5 @@
+<p align="center"><img src="packaging/logo.svg" alt="Cave: a cat in a cave, holding a torch" width="160"></p>
+
 # Cave
 
 Cave is an SSH server that you start, watch and stop yourself. It does the job of `sshd`, but it is an ordinary program: it needs no root, and every person who connects gets a session that runs as **you**. You open it, add the people you trust and the public keys they connect with, and see who tried to connect and how many times, who was connected and for how long, and which files they uploaded and downloaded. When you are done, you close it.

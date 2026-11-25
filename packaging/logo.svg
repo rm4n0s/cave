@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <title>Cave</title>
+  <desc>A cat sitting in a cave, holding up a torch.</desc>
+  <defs>
+    <linearGradient id="rock" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#5E6E76"/>
+      <stop offset="1" stop-color="#3A4A52"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="322" cy="214" r="230" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFB347" stop-opacity="0.85"/>
+      <stop offset="0.35" stop-color="#E07B2A" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#E07B2A" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="floorLight" cx="300" cy="440" r="170" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#8A5A34"/>
+      <stop offset="1" stop-color="#2A1C15"/>
+    </radialGradient>
+    <clipPath id="tile">
+      <rect x="16" y="16" width="480" height="480" rx="104"/>
+    </clipPath>
+    <clipPath id="mouth">
+      <path d="M92 470 V300 A164 156 0 0 1 420 300 V470 Z"/>
+    </clipPath>
+  </defs>
+
+  <g clip-path="url(#tile)">
+    <!-- The rock around the cave -->
+    <rect x="16" y="16" width="480" height="480" fill="url(#rock)"/>
+    <path d="M16 120 C90 96 150 70 230 64 C330 56 420 84 496 70 V16 H16 Z" fill="#6C7D85" opacity="0.6"/>
+
+    <!-- The cave, dark, lit by the torch -->
+    <g clip-path="url(#mouth)">
+      <rect x="80" y="130" width="352" height="360" fill="#120D0B"/>
+      <rect x="80" y="130" width="352" height="360" fill="url(#glow)"/>
+      <ellipse cx="256" cy="470" rx="200" ry="52" fill="url(#floorLight)"/>
+      <!-- Stalactites -->
+      <path d="M150 196 L160 236 L172 190 Z M352 178 L362 222 L374 186 Z M246 146 L254 178 L264 146 Z" fill="#1F1714"/>
+    </g>
+    <!-- The rim of the cave's mouth -->
+    <path d="M92 470 V300 A164 156 0 0 1 420 300 V470" fill="none" stroke="#2B383F" stroke-width="14"/>
+
+    <!-- The cat, sitting -->
+    <g fill="#171210">
+      <!-- tail, curled around the paws -->
+      <path d="M276 426 C318 432 344 418 344 394 C344 378 332 368 320 372" fill="none" stroke="#171210" stroke-width="16" stroke-linecap="round"/>
+      <!-- body -->
+      <path d="M186 432 C178 384 190 336 236 322 C282 330 298 380 292 432 Z"/>
+      <!-- head and ears -->
+      <circle cx="236" cy="288" r="44"/>
+      <path d="M198 270 L204 224 L232 254 Z"/>
+      <path d="M242 254 L270 224 L276 270 Z"/>
+      <!-- the arm that holds the torch -->
+      <path d="M262 352 C280 338 292 322 304 300" fill="none" stroke="#171210" stroke-width="20" stroke-linecap="round"/>
+    </g>
+    <!-- eyes, nose -->
+    <ellipse cx="221" cy="286" rx="9" ry="7" fill="#FFD54A"/>
+    <ellipse cx="251" cy="286" rx="9" ry="7" fill="#FFD54A"/>
+    <ellipse cx="222" cy="286" rx="2.4" ry="6" fill="#171210"/>
+    <ellipse cx="252" cy="286" rx="2.4" ry="6" fill="#171210"/>
+    <path d="M231 302 L241 302 L236 308 Z" fill="#C9786A"/>
+
+    <!-- The torch -->
+    <line x1="296" y1="334" x2="322" y2="236" stroke="#7A4A24" stroke-width="11" stroke-linecap="round"/>
+    <path d="M311 236 L335 242 L331 254 L309 248 Z" fill="#A86B34"/>
+    <circle cx="303" cy="304" r="11" fill="#171210"/>
+    <!-- flame -->
+    <path d="M326 152 C348 184 358 206 346 228 C338 242 314 242 306 228 C294 206 304 184 326 152 Z" fill="#FF5A1F"/>
+    <path d="M326 176 C342 198 346 212 338 226 C332 234 318 234 313 226 C305 212 310 198 326 176 Z" fill="#FFA21F"/>
+    <path d="M326 198 C335 210 337 218 332 226 C329 230 322 230 319 226 C315 218 318 210 326 198 Z" fill="#FFE57A"/>
+  </g>
+</svg>
