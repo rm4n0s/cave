@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rm4n0s/cave/internal/core/clock"
 	"github.com/rm4n0s/cave/internal/core/errtest"
 	"github.com/rm4n0s/cave/internal/core/sshtest"
 	"github.com/rm4n0s/errors"
@@ -86,16 +87,37 @@ type testSession struct {
 	// result gets what Serve returned.
 	result chan error
 	log    *bytes.Buffer
+	// clock is the session's clock.
+	clock *clock.Fake
+
+	mu sync.Mutex
+	// recorded are the transfers the session handed out.
+	recorded []Transfer
+}
+
+// testStart is the time the sessions' clocks show at first.
+var testStart = time.Date(2026, 11, 25, 10, 0, 0, 0, time.UTC)
+
+// transfers returns the transfers the session handed out so far.
+func (s *testSession) transfers() []Transfer {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]Transfer(nil), s.recorded...)
 }
 
 // serve starts a session on a file system; the client has not sent INIT yet.
 func serve(t *testing.T, fileSystem FileSystem) *testSession {
 	t.Helper()
-	s := &testSession{t: t, toServer: newStream(), toClient: newStream(), result: make(chan error, 1), log: &bytes.Buffer{}}
+	s := &testSession{t: t, toServer: newStream(), toClient: newStream(), result: make(chan error, 1), log: &bytes.Buffer{}, clock: clock.NewFake(testStart)}
 	logger := slog.New(slog.NewJSONHandler(s.log, &slog.HandlerOptions{Level: slog.LevelDebug}))
-	server := New(Options{FS: fileSystem, Logger: logger})
+	server := New(Options{FS: fileSystem, Logger: logger, Clock: s.clock})
+	record := func(tr Transfer) {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		s.recorded = append(s.recorded, tr)
+	}
 	go func() {
-		err := server.Serve(context.Background(), duplex{in: s.toServer, out: s.toClient})
+		err := server.Serve(context.Background(), duplex{in: s.toServer, out: s.toClient}, record)
 		s.toClient.Close()
 		s.result <- err
 	}()
@@ -253,6 +275,9 @@ func (m *memFS) Remove(name string) Status {
 func (m *memFS) RealPath(name string) (string, Status) {
 	if strings.Contains(name, "\x00") {
 		return "", Status{Code: StatusFailure, Message: "invalid argument"}
+	}
+	if path.IsAbs(name) {
+		return path.Clean(name), Status{}
 	}
 	return path.Join("/home/tester", name), Status{}
 }
@@ -758,8 +783,8 @@ func TestSessionsThatCannotGoOn(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			server := New(Options{FS: newMemFS(), Logger: slog.New(slog.NewJSONHandler(io.Discard, nil))})
-			err := server.Serve(context.Background(), &failing{in: bytes.NewReader(tt.input), readErr: tt.readErr, writeErr: tt.writeErr})
+			server := New(Options{FS: newMemFS(), Logger: slog.New(slog.NewJSONHandler(io.Discard, nil)), Clock: clock.NewFake(testStart)})
+			err := server.Serve(context.Background(), &failing{in: bytes.NewReader(tt.input), readErr: tt.readErr, writeErr: tt.writeErr}, nil)
 			errtest.Route(t, err, tt.wantRoute)
 			if tt.wantCause != nil && !errors.Is(err, tt.wantCause) {
 				t.Errorf("the cause is %v, want %v", err, tt.wantCause)
@@ -771,9 +796,9 @@ func TestSessionsThatCannotGoOn(t *testing.T) {
 func TestACancelledContextEndsTheSession(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	server := New(Options{FS: newMemFS(), Logger: slog.New(slog.NewJSONHandler(io.Discard, nil))})
+	server := New(Options{FS: newMemFS(), Logger: slog.New(slog.NewJSONHandler(io.Discard, nil)), Clock: clock.NewFake(testStart)})
 	// Nothing is read: the session was over before it began.
-	if err := server.Serve(ctx, &failing{in: bytes.NewReader([]byte{0xff, 0xff, 0xff, 0xff})}); err != nil {
+	if err := server.Serve(ctx, &failing{in: bytes.NewReader([]byte{0xff, 0xff, 0xff, 0xff})}, nil); err != nil {
 		t.Errorf("Serve returned %v", err)
 	}
 }
@@ -884,7 +909,7 @@ func TestRandomPacketsNeverBreakTheServer(t *testing.T) {
 func TestTheSessionsBuffersStayWithinTheLimit(t *testing.T) {
 	fs := newMemFS()
 	fs.put("/a", strings.Repeat("x", 1000))
-	c := &conn{s: New(Options{FS: fs, Logger: slog.New(slog.NewJSONHandler(io.Discard, nil))}), handles: map[string]*handle{}}
+	c := &conn{s: New(Options{FS: fs, Logger: slog.New(slog.NewJSONHandler(io.Discard, nil)), Clock: clock.NewFake(testStart)}), handles: map[string]*handle{}}
 	var input bytes.Buffer
 	packet := func(kind byte, body []byte) {
 		input.Write(binary.BigEndian.AppendUint32(nil, uint32(len(body)+1)))

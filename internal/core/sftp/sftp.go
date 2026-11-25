@@ -10,6 +10,7 @@ import (
 	"io"
 	"log/slog"
 
+	"github.com/rm4n0s/cave/internal/core/clock"
 	"github.com/rm4n0s/cave/internal/core/sanitize"
 	"github.com/rm4n0s/errors"
 )
@@ -108,6 +109,8 @@ type Options struct {
 	FS FileSystem
 	// Logger gets a line for every request at the debug level.
 	Logger *slog.Logger
+	// Clock tells the times of transfers.
+	Clock clock.Clock
 }
 
 // Server answers the requests of SFTP sessions. One Server serves any number of sessions; each
@@ -132,6 +135,8 @@ type conn struct {
 	initDone bool
 	// handles are the open files and folders, by the handle the client has for them.
 	handles map[string]*handle
+	// record gets the transfers; nil when nobody wants them.
+	record func(Transfer)
 	// lastHandle is the number of the last handle given; a handle is never given twice.
 	lastHandle uint64
 }
@@ -146,6 +151,8 @@ type handle struct {
 	pending []Entry
 	// listed says that "." and ".." and every entry were handed out.
 	listed bool
+	// transfer is what the file moved so far, for the history (docs/SPEC.md §9.11).
+	transfer Transfer
 }
 
 // close closes what the handle has open.
@@ -158,9 +165,10 @@ func (h *handle) close() Status {
 
 // Serve runs one session over rw until the client ends it, and closes every file the session
 // left open. It returns nil when the session ended at the end of a packet, and an error when
-// the client broke the protocol in a way that cannot be answered, or rw failed.
-func (s *Server) Serve(ctx context.Context, rw io.ReadWriter) error {
-	c := &conn{s: s, rw: rw, handles: map[string]*handle{}}
+// the client broke the protocol in a way that cannot be answered, or rw failed. record, when it
+// is not nil, gets every file the client read from or wrote to, when the file is closed.
+func (s *Server) Serve(ctx context.Context, rw io.ReadWriter, record func(Transfer)) error {
+	c := &conn{s: s, rw: rw, handles: map[string]*handle{}, record: record}
 	defer c.closeAll()
 	for ctx.Err() == nil {
 		kind, body, err := c.readPacket()
@@ -181,12 +189,27 @@ func (s *Server) Serve(ctx context.Context, rw io.ReadWriter) error {
 	return nil
 }
 
-// closeAll closes the files a session left open.
+// closeAll closes the files a session left open; their transfers were interrupted.
 func (c *conn) closeAll() {
 	for id, h := range c.handles {
 		_ = h.close() // the session is over: there is nobody to tell
 		delete(c.handles, id)
+		c.finish(h, ResultInterrupted)
 	}
+}
+
+// finish hands the transfer of a file that was closed to record, when it moved anything or the
+// file was created or emptied; with a failure on the way, the result is ResultFailed.
+func (c *conn) finish(h *handle, result string) {
+	t := h.transfer
+	if c.record == nil || h.file == nil || (t.Downloaded == 0 && t.Uploaded == 0 && !t.Created) {
+		return
+	}
+	if t.Result == ResultFailed {
+		result = ResultFailed
+	}
+	t.Result, t.ClosedAt = result, c.s.opts.Clock.Now().UTC()
+	c.record(t)
 }
 
 // readPacket reads one packet and returns its type and what follows it. The body is nil, with
@@ -353,11 +376,20 @@ func statusPacket(id uint32, status Status) []byte {
 
 // file returns the open file of a handle; the handle of a folder is not one.
 func (c *conn) file(id string) (File, Status) {
+	h, status := c.fileHandle(id)
+	if !status.OK() {
+		return nil, status
+	}
+	return h.file, Status{}
+}
+
+// fileHandle returns the handle of an open file, for a request that counts what it moves.
+func (c *conn) fileHandle(id string) (*handle, Status) {
 	h, ok := c.handles[id]
 	if !ok || h.file == nil {
 		return nil, Status{Code: StatusFailure, Message: "invalid handle"}
 	}
-	return h.file, Status{}
+	return h, Status{}
 }
 
 // addHandle keeps an open file or folder and returns the answer with its handle.
@@ -390,7 +422,14 @@ func (c *conn) open(id uint32, r *reader) ([]byte, string, Status) {
 	if !status.OK() {
 		return statusPacket(id, status), path, status
 	}
-	return c.addHandle(id, &handle{file: file}), path, Status{}
+	// The history names the file by its absolute path; the name the client gave stands in when
+	// the system cannot say.
+	absolute, resolved := c.s.opts.FS.RealPath(path)
+	if !resolved.OK() {
+		absolute = path
+	}
+	transfer := Transfer{Path: absolute, OpenedAt: c.s.opts.Clock.Now().UTC(), Created: flags&(OpenCreate|OpenTrunc) != 0}
+	return c.addHandle(id, &handle{file: file, transfer: transfer}), path, Status{}
 }
 
 func (c *conn) opendir(id uint32, r *reader) ([]byte, string, Status) {
@@ -552,15 +591,17 @@ func (c *conn) close(r *reader) Status {
 		return Status{Code: StatusFailure, Message: "invalid handle"}
 	}
 	delete(c.handles, name)
-	return h.close()
+	status := h.close()
+	c.finish(h, ResultDone)
+	return status
 }
 
 func (c *conn) read(id uint32, r *reader) ([]byte, string, Status) {
-	handle, offset, length := r.str(), r.uint64(), r.uint32()
+	name, offset, length := r.str(), r.uint64(), r.uint32()
 	status := badMessage(r)
-	var file File
+	var h *handle
 	if status.OK() {
-		file, status = c.file(handle)
+		h, status = c.fileHandle(name)
 	}
 	if !status.OK() {
 		return statusPacket(id, status), "", status
@@ -573,11 +614,14 @@ func (c *conn) read(id uint32, r *reader) ([]byte, string, Status) {
 	if c.out == nil {
 		c.out = make([]byte, header+MaxRead)
 	}
-	n, status := file.ReadAt(c.out[header:header+int(length)], offset)
+	n, status := h.file.ReadAt(c.out[header:header+int(length)], offset)
+	h.transfer.Downloaded += int64(n)
 	if n == 0 {
 		// Nothing was read: the end of the file, or the reason.
 		if status.OK() {
 			status = Status{Code: StatusEOF}
+		} else if status.Code != StatusEOF {
+			h.transfer.Result = ResultFailed
 		}
 		return statusPacket(id, status), "", status
 	}
@@ -589,15 +633,21 @@ func (c *conn) read(id uint32, r *reader) ([]byte, string, Status) {
 }
 
 func (c *conn) write(r *reader) Status {
-	handle, offset, data := r.str(), r.uint64(), r.bytes()
+	name, offset, data := r.str(), r.uint64(), r.bytes()
 	if status := badMessage(r); !status.OK() {
 		return status
 	}
-	file, status := c.file(handle)
+	h, status := c.fileHandle(name)
 	if !status.OK() {
 		return status
 	}
-	return file.WriteAt(data, offset)
+	status = h.file.WriteAt(data, offset)
+	if status.OK() {
+		h.transfer.Uploaded += int64(len(data))
+	} else {
+		h.transfer.Result = ResultFailed
+	}
+	return status
 }
 
 func (c *conn) stat(kind byte, id uint32, r *reader) ([]byte, string, Status) {

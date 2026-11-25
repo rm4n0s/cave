@@ -196,6 +196,7 @@ func (a *App) open(ctx context.Context) error {
 	})
 	session.Register(a.server, session.Options{
 		Settings: a.settings, Logger: a.logger, User: a.opts.User, Environ: a.opts.Environ, RuntimeDir: dirs.Runtime,
+		History: a.history, Clock: a.clock,
 	})
 	forward.Register(a.server, forward.Options{Settings: a.settings, Clock: a.clock, Logger: a.logger})
 

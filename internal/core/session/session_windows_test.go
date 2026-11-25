@@ -81,7 +81,7 @@ func newWinFixture(t *testing.T) *winFixture {
 	f := servertest.New(t)
 	f.Set(string(settings.SessionShell), "cmd.exe")
 	Register(f.Server, Options{Settings: f.Settings, Logger: f.Logger, User: User{Name: "tester", Home: f.Home},
-		Environ: os.Environ(), RuntimeDir: f.Dirs.Runtime})
+		Environ: os.Environ(), RuntimeDir: f.Dirs.Runtime, History: f.History, Clock: f.Clock})
 	f.Start()
 	_, key := f.Person("alice")
 	return &winFixture{Fixture: f, t: t, client: f.Connect("alice", key)}

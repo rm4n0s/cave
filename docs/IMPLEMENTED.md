@@ -624,3 +624,14 @@ Every step of `docs/IMPLEMENTATION.md` is implemented (M0 to M9). The milestones
 - **Proof**: none
 - **Manual checks**: none
 - **Glutter issues**: none
+
+## Step 10.3: Recording transfers
+- **Date**: 2026-11-25
+- **Branch**: feat/step-10.3-record-transfers
+- **Summary**: Every file an SFTP session opens counts the bytes its reads returned and its writes took, and whether it was opened to be created or emptied; when it is closed (`done`, or `failed` after a read that was not at the end of the file or a write failed) or left open at the end of the session (`interrupted`), and it moved anything or was created, the session hands it to the history as a transfer of its connection and person (SPEC §9.11). `sftp.Options` has a `Clock`, `Serve` takes the function that gets the transfers, and `session.Options` has the history and the clock.
+- **Decisions**: the path is what `REALPATH` answers for the opened name (so a relative name starts at the home folder), or the name itself when the system cannot say; the plan had said "without resolving links", and the spec's "the way `REALPATH` does it" is what was followed. The in-memory file system of the tests made absolute paths relative to its home; it now answers them as they are.
+- **Checks**: `scripts/checks.sh` passed: gofmt, vet (Linux, macOS, Windows), golangci-lint 0 issues, race tests as a debug build, cgo-free build and tests, Windows build, error tags (none untested), the Wine run.
+- **Tests**: in `sftp`, a table: an upload, a download read to its end, read and write on one handle, an empty file created, a file opened and closed without I/O, a read past the end only, a failed write, a failed read, a relative path, a folder; files left open are interrupted. In `session`, an upload and a download over the subsystem with the person and the connection's id. **OpenSSH**: `sftp put`, `sftp get` and `scp` (SFTP mode) of 300 KiB are three transfers with the bytes and `done`; `scp -O` is no transfer and is the `exec` activity of its connection (ran, not skipped).
+- **Proof**: none
+- **Manual checks**: none
+- **Glutter issues**: none

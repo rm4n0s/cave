@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/rm4n0s/cave/internal/core/agentfwd"
+	"github.com/rm4n0s/cave/internal/core/clock"
+	"github.com/rm4n0s/cave/internal/core/history"
 	"github.com/rm4n0s/cave/internal/core/pty"
 	"github.com/rm4n0s/cave/internal/core/sanitize"
 	"github.com/rm4n0s/cave/internal/core/server"
@@ -53,6 +55,10 @@ type Options struct {
 	Environ []string
 	// RuntimeDir is where the sockets of forwarded agents are made (storage.Dirs.Runtime).
 	RuntimeDir string
+	// History gets the files that SFTP sessions read and write (docs/SPEC.md §9.11).
+	History *history.Store
+	// Clock tells the times of those files.
+	Clock clock.Clock
 }
 
 // handler serves session channels.
@@ -71,7 +77,7 @@ func Register(srv *server.Server, opts Options) {
 	if err != nil {
 		opts.Logger.Warn("the sftp subsystem is not available", "err", err)
 	} else {
-		h.sftp = sftp.New(sftp.Options{FS: fileSystem, Logger: opts.Logger})
+		h.sftp = sftp.New(sftp.Options{FS: fileSystem, Logger: opts.Logger, Clock: opts.Clock})
 	}
 	srv.HandleChannel("session", h.serve)
 }
@@ -382,7 +388,7 @@ func (s *session) startSubsystem(name string) bool {
 	logger.Info("session started")
 	remove := s.conn.AddActivity(server.ActivitySFTP, "")
 	go func() {
-		err := s.h.sftp.Serve(s.ctx, s.channel)
+		err := s.h.sftp.Serve(s.ctx, s.channel, s.recordTransfer)
 		remove()
 		status := 0
 		if err != nil {
@@ -395,6 +401,16 @@ func (s *session) startSubsystem(name string) bool {
 		s.finish(status, "")
 	}()
 	return true
+}
+
+// recordTransfer puts a file the SFTP session read or wrote into the history, as this
+// connection's.
+func (s *session) recordTransfer(t sftp.Transfer) {
+	s.h.opts.History.AddTransfer(history.Transfer{
+		ConnectionID: s.conn.ID(), PersonID: s.conn.PersonID(), PersonName: s.conn.PersonName(), Path: t.Path,
+		OpenedAt: t.OpenedAt, ClosedAt: t.ClosedAt, Downloaded: t.Downloaded, Uploaded: t.Uploaded, Created: t.Created,
+		Result: history.Result(t.Result),
+	})
 }
 
 // finish tells the client how the process ended and lets serve return.
