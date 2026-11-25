@@ -1,0 +1,30 @@
+Cave   running on port 2222                                                 1 connected · 9 attempts
+1 Overview  2 People  3 Attempts  4 Connections  [5 History]  6 Settings                            
+────────────────────────────────────────────────────────────────────────────────────────────────────
+ Connections  [Transfers]   Search: —   Cleared 20 d ago                                            
+  Who        File                                 Direction              Size When       Result     
+> alice      /home/ada/notes.txt                  Upload               2.0 KB 5 min ago  Done       
+  alice      /home/ada/photos/beach.jpg           Download             3.4 MB 2 h ago    Done       
+  alice      /home/ada/db.sqlite                  Both       41.0 KB / 8.2 KB 2 h ago    Done       
+  alice      …d/deeply/nested/report-final-v2.pdf Download             1.2 MB 2 h ago    Done       
+  alice      /home/ada/empty.log                  Upload                  0 B 2 h ago    Done       
+  alice      /home/ada/backup.tar                 Upload              52.4 MB 2 h ago    Interrupted
+  alice      /home/ada/disk-full.bin              Upload               4.1 KB 2 h ago    Failed     
+  alice      /home/ada/big.iso                    Download             1.1 GB 2 h ago    Done       
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                    
+t other tab   / search   enter show   C clear   ? keys   q quit                                     

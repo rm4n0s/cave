@@ -25,6 +25,16 @@ func fit(s string, width int) string {
 	return s
 }
 
+// cutStart cuts s to width terminal cells by dropping its beginning, with "…" as the first cell
+// when it was longer.
+func cutStart(s string, width int) string {
+	w := lipgloss.Width(s)
+	if width <= 0 || w <= width {
+		return s
+	}
+	return ansi.TruncateLeft(s, w-width+1, "…")
+}
+
 // clean makes pasted or typed text safe to put in one line: every control character (C0, DEL,
 // C1), newline and tab becomes a space, and invalid UTF-8 becomes U+FFFD.
 func clean(s string) string {

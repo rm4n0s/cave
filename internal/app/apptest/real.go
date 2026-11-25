@@ -203,3 +203,25 @@ func (r *Real) Eventually(what string, cond func() bool) {
 		time.Sleep(5 * time.Millisecond)
 	}
 }
+
+// Upload writes a file into the home folder over the sftp subsystem of the client's connection,
+// as sftp and scp do: the history gets a transfer of the person.
+func (r *Real) Upload(client *ssh.Client, name string, data []byte) {
+	r.t.Helper()
+	channel, requests, err := client.OpenChannel("session", nil)
+	if err != nil {
+		r.t.Fatalf("apptest: %v", err)
+	}
+	go ssh.DiscardRequests(requests)
+	defer func() { _ = channel.Close() }() // the session is done with
+	if ok, err := channel.SendRequest("subsystem", true, ssh.Marshal(struct{ Name string }{"sftp"})); err != nil || !ok {
+		r.t.Fatalf("apptest: the sftp subsystem was refused: %v", err)
+	}
+	sftp := sshtest.NewSFTPClient(r.t, channel)
+	sftp.Init()
+	handle := sftp.Open(name, sshtest.SFTPOpenWrite|sshtest.SFTPOpenCreate|sshtest.SFTPOpenTrunc, sshtest.SFTPAttrs{})
+	if code := sftp.Write(handle, 0, data); code != sshtest.SFTPOK {
+		r.t.Fatalf("apptest: write: status %d", code)
+	}
+	sftp.Close(handle)
+}

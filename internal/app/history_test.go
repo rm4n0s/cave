@@ -2,6 +2,8 @@ package app
 
 import (
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -155,4 +157,28 @@ func TestHistoryClearSetting(t *testing.T) {
 			t.Errorf("never has a next clear: %v", h.NextClearAt)
 		}
 	})
+}
+
+func TestSessionHomeIsWhereFilesGo(t *testing.T) {
+	f := newFixture(t, nil)
+	// By its real path: the temporary folder of macOS is under a link, and the history names a
+	// file by the path REALPATH gives.
+	elsewhere, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := f.open(func(o *Options) { o.User.Home = ""; o.SessionHome = elsewhere })
+	if a.opts.User.Home != elsewhere {
+		t.Fatalf("the sessions' home is %q, want %q", a.opts.User.Home, elsewhere)
+	}
+	key := f.person(a, "alice")
+	upload(t, f.connect(a, "alice", key, f.port), "up.txt", []byte("x"))
+	h := waitHistory(t, a, 0, 1)
+	// SFTP writes a path its own way (Windows: /C:/...); where the file is, the disk says.
+	if got := h.Transfers[0].Path; !strings.HasSuffix(got, "/up.txt") {
+		t.Errorf("the history names %q", got)
+	}
+	if _, err := os.Stat(filepath.Join(elsewhere, "up.txt")); err != nil {
+		t.Errorf("the file is not in the home of CAVE_SESSION_HOME: %v", err)
+	}
 }

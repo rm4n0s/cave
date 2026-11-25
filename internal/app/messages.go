@@ -30,6 +30,7 @@ var messages = map[string]string{
 	"FlagsHelp":               "Run with --help to see the flags.",
 	"FlagsUnexpectedArgument": "Cave takes flags only, not {argument}. Run with --help to see them.",
 	"FlagsPortInvalid":        "A port is a number from 1 to 65535, not {port}.",
+	"SessionHomeInvalid":      "CAVE_SESSION_HOME must be an absolute path, not {dir}.",
 	"FlagsPageInvalid":        "There is no page named {page}. The pages are overview, people, attempts, connections, history and settings.",
 
 	// People and keys.

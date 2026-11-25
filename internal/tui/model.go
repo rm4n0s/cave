@@ -90,6 +90,16 @@ type Model struct {
 	connList list
 	connSel  string
 
+	// The History page: the tab (connections or transfers), the search, the selection of each tab
+	// kept by the record's id, and whether the details of the selected record are shown.
+	histTab      int
+	histSearch   string
+	histConnList list
+	histConnSel  string
+	histTrList   list
+	histTrSel    string
+	histDetail   bool
+
 	// The Settings page: the selection among the rows that can be changed, and the first line
 	// shown (kept, so that the page scrolls only when the selection leaves it).
 	settingsList  list
@@ -103,6 +113,7 @@ type Model struct {
 	people      []people.Person
 	attempts    app.AttemptsSnapshot
 	connections []server.Connection
+	history     app.HistorySnapshot
 	settings    settings.Snapshot
 }
 
@@ -120,11 +131,13 @@ func (m *Model) refresh() {
 	m.people = m.app.People()
 	m.attempts = m.app.Attempts()
 	m.connections = m.app.Connections()
+	m.history = m.app.History()
 	m.settings = m.app.Settings()
 	m.syncPeople()
 	m.syncKeys()
 	m.syncAttempts()
 	m.syncConnections()
+	m.syncHistory()
 	m.syncSettings()
 }
 
@@ -141,6 +154,8 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.peopleList.setHeight(m.height - chrome - 1)
 		m.keyList.setHeight(m.height - chrome - 2)
 		m.attemptList.setHeight(m.height - chrome - 2)
+		m.histConnList.setHeight(m.height - chrome - 2)
+		m.histTrList.setHeight(m.height - chrome - 2)
 		m.connList.setHeight(m.height - chrome - 1)
 		m.syncSettings()
 	case changedMsg, tickMsg:
@@ -258,8 +273,9 @@ func (m Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m.keyConnections(msg)
 		case pageSettings:
 			return m.keySettings(msg)
-		case pageOverview, pageHistory, pageCount:
-			// TODO(step 10.5): the keys of the History page.
+		case pageHistory:
+			return m.keyHistory(msg)
+		case pageOverview, pageCount:
 		}
 	}
 	return m, nil

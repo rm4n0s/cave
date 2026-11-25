@@ -63,6 +63,9 @@ type Options struct {
 	NoStart bool
 	// AllowRoot is --allow-root: run although the user is root.
 	AllowRoot bool
+	// SessionHome is CAVE_SESSION_HOME: the home folder of the sessions in place of the user's
+	// own; "" is the user's.
+	SessionHome string
 
 	// IsRoot says whether the user is root; nil asks the system.
 	IsRoot func() bool
@@ -147,6 +150,9 @@ func Open(ctx context.Context, opts Options) (*App, error) {
 	}
 	if a.opts.User == (session.User{}) {
 		a.opts.User = session.CurrentUser(a.opts.Environ)
+	}
+	if a.opts.SessionHome != "" {
+		a.opts.User.Home = a.opts.SessionHome
 	}
 	if err := a.open(ctx); err != nil {
 		_ = a.release() // what failed to open is the error that matters, not what failed to close

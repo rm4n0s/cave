@@ -139,6 +139,8 @@ func (m Model) pageLines(height int) []string {
 		return m.overviewLines(height)
 	case pageAttempts:
 		return m.attemptLines(height)
+	case pageHistory:
+		return m.historyLines(height)
 	case pageConnections:
 		return m.connectionLines(height)
 	case pageSettings:

@@ -1,0 +1,30 @@
+Cave   running on port 2222                                                 1 connected · 9 attempts
+1 Overview  2 People  3 Attempts  4 Connections  [5 History]  6 Settings                            
+────────────────────────────────────────────────────────────────────────────────────────────────────
+[Connections]  Transfers   Search: —   Cleared 20 d ago                                             
+Who          alice                                                                                  
+Address      198.51.100.7                                                                           
+Key          SHA256:NSXdinty39CHNSXdinty39CHNSXdinty39CHNSXdint                                     
+Client       SSH-2.0-OpenSSH_9.8                                                                    
+Connected    2026-11-24 09:00:00 UTC                                                                
+Ended        2026-11-24 11:05:00 UTC                                                                
+Duration     2 h 5 min                                                                              
+How it ended Client left                                                                            
+Data         in 48.2 KB · out 1.4 MB                                                                
+Opened       exec, sftp                                                                             
+                                                                                                    
+Files                                                                                               
+  Download             3.4 MB  Done        /home/ada/photos/beach.jpg                               
+  Both       41.0 KB / 8.2 KB  Done        /home/ada/db.sqlite                                      
+  Download             1.2 MB  Done        /home/ada/projects/deeply/nested/deeply/nested/deeply/ne…
+  Upload                  0 B  Done        /home/ada/empty.log                                      
+  Upload              52.4 MB  Interrupted /home/ada/backup.tar                                     
+  Upload               4.1 KB  Failed      /home/ada/disk-full.bin                                  
+  Download             1.1 GB  Done        /home/ada/big.iso                                        
+                                                                                                    
+                                                                                                    
+                                                                                                    
+                                                                                                    
+────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                                    
+esc back   ? keys   q quit                                                                          

@@ -1,0 +1,16 @@
+Cave   running on port 2222         1 connected · 9 attempts
+1  2  3  4  [5 History]  6                                  
+────────────────────────────────────────────────────────────
+[Connections]  Transfers   Search: —   Cleared 20 d ago     
+Who          alice                                          
+Address      198.51.100.7                                   
+Key          SHA256:NSXdinty39CHNSXdinty39CHNSXdinty39CHNSX…
+Client       SSH-2.0-OpenSSH_9.8                            
+Connected    2026-11-24 09:00:00 UTC                        
+Ended        2026-11-24 11:05:00 UTC                        
+Duration     2 h 5 min                                      
+How it ended Client left                                    
+Data         in 48.2 KB · out 1.4 MB                        
+────────────────────────────────────────────────────────────
+                                                            
+esc back   ? keys   q quit                                  

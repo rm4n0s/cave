@@ -1,0 +1,16 @@
+Cave   running on port 2222         1 connected · 9 attempts
+1  2  3  4  [5 History]  6                                  
+────────────────────────────────────────────────────────────
+[Connections]  Transfers   Search: —   Cleared 20 d ago     
+  Who      Address          Duration      Ended             
+> alice    198.51.100.7     connected now —                 
+  alice    198.51.100.7     2 h 5 min     Client left       
+  carol    2001:db8::42     45 s          Disconnected by y…
+  bob      192.0.2.50       12 min        Person or key cha…
+  alice    198.51.100.7     1 d 2 h       Server stopped    
+  carol    203.0.113.80     4 min         Stopped answering 
+  alice    198.51.100.7     —             Unknown: Cave did…
+                                                            
+────────────────────────────────────────────────────────────
+                                                            
+t other tab  / search  enter show  C clear  ? keys  q quit  

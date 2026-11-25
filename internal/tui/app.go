@@ -23,6 +23,7 @@ type App interface {
 	People() []people.Person
 	Attempts() app.AttemptsSnapshot
 	Connections() []server.Connection
+	History() app.HistorySnapshot
 	Settings() settings.Snapshot
 	Subscribe(fn func(app.Event)) (cancel func())
 	StartServer(ctx context.Context) error
@@ -38,6 +39,7 @@ type App interface {
 	RemoveKey(ctx context.Context, personID, keyID string) error
 	ClearAttempts(ctx context.Context) error
 	RemoveAttempt(ctx context.Context, id string) error
+	ClearHistory(ctx context.Context) error
 	Disconnect(ctx context.Context, id string) error
 	DisconnectAll()
 	Set(ctx context.Context, key string, value any) error

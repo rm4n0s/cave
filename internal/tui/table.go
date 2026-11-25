@@ -6,12 +6,15 @@ import "strings"
 const minFlexWidth = 4
 
 // column is one column of a table: a title, and either a width in cells (fixed) or a share of
-// what is left (flex). A right column puts its text at the right end, for numbers.
+// what is left (flex). A right column puts its text at the right end, for numbers; a column cut
+// at the start drops the beginning of a text that is too long, so that a path keeps the name of
+// its file.
 type column struct {
-	title string
-	width int
-	flex  bool
-	right bool
+	title      string
+	width      int
+	flex       bool
+	right      bool
+	cutAtStart bool
 }
 
 // table is a table of text with a title line. It draws rows that a page owns.
@@ -60,6 +63,9 @@ func (t table) line(cells []string, widths []int) string {
 		cell := ""
 		if i < len(cells) {
 			cell = cells[i]
+		}
+		if c.cutAtStart {
+			cell = cutStart(cell, widths[i])
 		}
 		parts[i] = fitAlign(cell, widths[i], c.right)
 	}

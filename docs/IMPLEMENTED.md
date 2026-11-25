@@ -646,3 +646,14 @@ Every step of `docs/IMPLEMENTATION.md` is implemented (M0 to M9). The milestones
 - **Proof**: none
 - **Manual checks**: none
 - **Glutter issues**: none
+
+## Step 10.5: The TUI's History page
+- **Date**: 2026-11-25
+- **Branch**: feat/step-10.5-tui-history
+- **Summary**: Page 5 of `tcave`: the tabs Connections and Transfers (`t`), the search over who, address and file (`/`), the details of a connection (with the files it moved) or of a transfer (with its whole path) (`enter`, `esc`), and "Clear the history? Connections that are open stay." (`C`). The tables of SPEC §11.8 with the words of `internal/app`; a path is cut at its start, so that the file's name shows. `apptest.Real.Upload` writes a file over SFTP; `scripts/proof-sftp.sh` runs the real `sftp` for proofs, isolated as `proof-ssh.sh` runs `ssh`.
+- **Decisions**: the first proof run wrote its two test files (`notes.txt`, `photo.jpg`) into the user's real home: Cave gives a session the account's home, and `scripts/isolated.sh` changed only `HOME`. The user chose (2026-11-25) a variable: `CAVE_SESSION_HOME`, an absolute path (else `SessionHomeInvalid`), names the home of the sessions in place of the account's, and `scripts/isolated.sh` sets it to its own home (SPEC §9.4, §14.1, the guide). The user was told about the two files, which were left for them to remove. The key `t` is worded "other tab", so that the key line fits 60 columns; the details at 60×16 are cut at the bottom, as the Attempts page's are. The guide's list of pages has `history`.
+- **Checks**: `scripts/checks.sh` passed: gofmt, vet (Linux, macOS, Windows), golangci-lint 0 issues, race tests as a debug build, cgo-free build and tests, Windows build, error tags (none untested), the Wine run.
+- **Tests**: `TestGoldenHistory` (12 goldens: the sample at 100×30 and 60×16 on each tab, empty, the details of a connection and of a transfer, the question, a search, nothing that matches; every one looked at); the words in the tables; the keys (`C` and `y` → `ClearHistory()`, `C` and `n`, an empty history, `t` and `esc`, the help); the selection kept by id and the details closed when their record goes; the real application (a connection with an upload, `Client left`, the upload on the Transfers tab, the clear); `CAVE_SESSION_HOME` (set, not set, relative refused by its route, and the file of an upload lands in that home).
+- **Proof**: [10.5-history.txt](implemented-proof-images/10.5-history.txt) (two real connections of alice, `ssh` and `sftp`, with their duration and `Client left`), [10.5-history-transfers.txt](implemented-proof-images/10.5-history-transfers.txt) (two uploads and a download of the real `sftp`, in the proof's own home)
+- **Manual checks**: none
+- **Glutter issues**: none

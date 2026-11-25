@@ -4,6 +4,7 @@ import (
 	"flag"
 	"io"
 	"log/slog"
+	"path/filepath"
 	"runtime"
 	"slices"
 	"strings"
@@ -21,6 +22,7 @@ const (
 	TagFlagsPortInvalid        = "FlagsPortInvalid"
 	TagFlagsHelp               = "FlagsHelp"
 	TagFlagsPageInvalid        = "FlagsPageInvalid"
+	TagSessionHomeInvalid      = "SessionHomeInvalid"
 )
 
 // Pages are the names of the pages of both user interfaces, in the order they are shown; --page
@@ -124,15 +126,27 @@ func ParseFlags(program string, args []string) (Flags, error) {
 	return f, nil
 }
 
+// EnvSessionHome is the variable that names the home folder of the sessions in place of the
+// account's (docs/SPEC.md §9.5): scripts/isolated.sh sets it, so that what a proof's client does
+// stays in the proof's folder.
+const EnvSessionHome = "CAVE_SESSION_HOME"
+
 // Options returns the options to open the application with these flags: the folders are the
-// flags', else those of the CAVE_ variables, else the platform's (storage.Resolve).
+// flags', else those of the CAVE_ variables, else the platform's (storage.Resolve). The home of
+// the sessions is CAVE_SESSION_HOME when it is set, which must be an absolute path
+// (SessionHomeInvalid).
 func (f Flags) Options(program string, env storage.Env) (Options, error) {
 	dirs, err := storage.Resolve(storage.Options{ConfigDir: f.ConfigDir, StateDir: f.StateDir}, env)
 	if err != nil {
 		return Options{}, err
 	}
+	home, _ := env(EnvSessionHome)
+	if home != "" && !filepath.IsAbs(home) {
+		return Options{}, errors.New(TagSessionHomeInvalid, "CAVE_SESSION_HOME must be an absolute path", "dir", sanitize.Display(home, 200))
+	}
 	return Options{
 		Program: program, Dirs: dirs, LogLevel: f.LogLevel, Port: f.Port, NoStart: f.NoStart, AllowRoot: f.AllowRoot,
+		SessionHome: home,
 	}, nil
 }
 

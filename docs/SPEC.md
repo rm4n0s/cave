@@ -296,7 +296,7 @@ A `session` channel takes these requests:
 
 Only one of `shell`, `exec`, `subsystem` succeeds per channel. Rules:
 
-- The process starts in the home folder (else `/`).
+- The process starts in the home folder (else `/`). The home folder is the OS account's (the system's account list), not Cave's `HOME`; the variable `CAVE_SESSION_HOME`, an absolute path (else `SessionHomeInvalid`), names another one, for every session and for SFTP. `scripts/isolated.sh` sets it to its own home, so that a proof's client never writes into the user's home (the user, 2026-11-25).
 - **Without a PTY**: standard input, output and error are pipes; error goes to the channel's extended data. When the client closes its side, standard input is closed.
 - **With a PTY**: the three are the PTY, and the process is the leader of a new session with the PTY as controlling terminal. There is one output stream (nothing goes to the extended data). A terminal has no end of input: when the client closes its side, nothing changes, as with `sshd`.
 - When the process ends, Cave sends what is left of its output (waiting at most 2 seconds for descendants that still hold the pipes or the PTY), then `exit-status`, or `exit-signal` when a signal killed it, and closes the channel.
@@ -542,7 +542,7 @@ Under Wine (§14.4). What Wine cannot show is listed for the user in `docs/MANUA
 ### 14.1 Isolation
 No test, proof or check touches the user's Cave folders, `~/.ssh`, SSH agent, `~/.wine`, or the system's `sshd`, or listens anywhere but loopback on a port the OS chose.
 - Go tests: `storagetest.Isolate(t)` points the folders, `HOME`, `XDG_*` and the runtime folder at `t.TempDir()` (by its real path: the temporary folder of macOS is under the link `/var`), and `TMPDIR` at a short folder of its own, in which macOS keeps the runtime folder.
-- Scripts: `scripts/isolated.sh` runs a command with all of those (and `TMPDIR`) under a temporary folder (or a fixture copied into one) and removes it afterwards.
+- Scripts: `scripts/isolated.sh` runs a command with all of those (and `TMPDIR`) under a temporary folder (or a fixture copied into one) and removes it afterwards; it also sets `CAVE_SESSION_HOME` (§9.4), so that the sessions of a Cave it runs have the isolated home and not the account's.
 - Sessions started by tests run with the isolated home and a shell the test chooses (`/bin/sh`).
 
 ### 14.2 Levels

@@ -149,6 +149,43 @@ func TestFlagsOptions(t *testing.T) {
 	errtest.Route(t, err, "Flags.Options->Resolve.StorageDirNotAbsolute")
 }
 
+func TestSessionHomeVariable(t *testing.T) {
+	env := func(home string) storage.Env {
+		return func(name string) (string, bool) {
+			switch name {
+			case storage.EnvConfigDir:
+				return absolute("/env/config"), true
+			case storage.EnvStateDir:
+				return absolute("/env/state"), true
+			case EnvSessionHome:
+				return home, home != ""
+			}
+			return "", false
+		}
+	}
+	tests := []struct {
+		name, home string
+		want       string
+	}{
+		{"not set", "", ""},
+		{"an absolute path", absolute("/tmp/proof/home"), absolute("/tmp/proof/home")},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Flags{}.Options("tcave", env(tt.home))
+			if err != nil || got.SessionHome != tt.want {
+				t.Errorf("SessionHome = %q, %v; want %q", got.SessionHome, err, tt.want)
+			}
+		})
+	}
+	t.Run("a relative path is refused", func(t *testing.T) {
+		_, err := Flags{}.Options("tcave", env("proof/home"))
+		if meta := errtest.Route(t, err, "Flags.Options.SessionHomeInvalid"); meta["dir"] != "proof/home" {
+			t.Errorf("metadata %v", meta)
+		}
+	})
+}
+
 func TestIsUsageError(t *testing.T) {
 	for _, args := range [][]string{{"--nope"}, {"x"}, {"--port", "0"}, {"--page", "home"}, {"--log-level", "loud"}} {
 		_, err := ParseFlags("cave", args)

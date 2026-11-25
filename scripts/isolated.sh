@@ -16,6 +16,7 @@
 #   TMPDIR                                           folders inside the temporary folder (macOS
 #                                                    keeps Cave's runtime folder in TMPDIR)
 #   CAVE_ISOLATED_ROOT                               the temporary folder
+#   CAVE_SESSION_HOME                                the new HOME: the home of Cave's sessions
 #   SSH_AUTH_SOCK, SSH_AGENT_PID, SSH_ASKPASS        unset
 #   GOPATH, GOMODCACHE, GOCACHE                      Go's own, as before (when go is installed)
 #
@@ -90,6 +91,9 @@ export CAVE_ISOLATED_ROOT="$root"
 export CAVE_CONFIG_DIR="$root/config"
 export CAVE_STATE_DIR="$root/state"
 export HOME="$root/home"
+# Cave gives a session the account's home, not $HOME (SPEC §9.5): this keeps what a proof's
+# client does (a file uploaded, a command run) in the proof's folder.
+export CAVE_SESSION_HOME="$root/home"
 export XDG_CONFIG_HOME="$root/xdg-config"
 export XDG_STATE_HOME="$root/xdg-state"
 export XDG_CACHE_HOME="$root/xdg-cache"

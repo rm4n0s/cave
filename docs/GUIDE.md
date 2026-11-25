@@ -141,9 +141,11 @@ Both programs take the same flags. A flag is for one run and is never saved.
 | `--no-start` | Do not start the server when the program starts (it is already so unless `server.startOnLaunch` is on). |
 | `--allow-root` | Run although the user is root. Every person would get a root shell: do not, unless you mean it. |
 | `--log-level <level>` | What the log has: `debug`, `info` (the default), `warn` or `error`. |
-| `--page <page>` | The page to show first: `overview`, `people`, `attempts`, `connections` or `settings`. |
+| `--page <page>` | The page to show first: `overview`, `people`, `attempts`, `connections`, `history` or `settings`. |
 | `--version` | Print the version and exit. |
 | `--help` | Print the flags and the default folders, and exit. |
+
+The variable `CAVE_SESSION_HOME` (an absolute path) gives the people who connect another folder as their home than yours: where their shell starts and where `sftp` and `scp` put files they name without a folder. It is meant for trying Cave out; without it, sessions use your home, as `sshd` does.
 
 Folders given to Cave must be absolute paths. To try Cave without touching your own, run it on empty folders: `cave --config-dir /tmp/cave-try/config --state-dir /tmp/cave-try/state`.
 

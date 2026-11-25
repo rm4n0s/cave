@@ -77,6 +77,8 @@ func pageBindings(p page) []binding {
 		return []binding{{"f", "filter"}, {"/", "search"}, {"enter", "show"}, {"d", "remove"}, {"C", "clear"}}
 	case pageConnections:
 		return []binding{{"d", "disconnect"}, {"D", "disconnect all"}}
+	case pageHistory:
+		return []binding{{"t", "other tab"}, {"/", "search"}, {"enter", "show"}, {"C", "clear"}}
 	case pageSettings:
 		return []binding{{"enter/space", "change"}}
 	}
@@ -110,7 +112,7 @@ func (m Model) pageKeys() []binding {
 	if m.page == pagePeople && m.personID != "" {
 		return personBindings()
 	}
-	if m.page == pageAttempts && m.attemptDetail {
+	if (m.page == pageAttempts && m.attemptDetail) || (m.page == pageHistory && m.histDetail) {
 		return []binding{{"esc", "back"}}
 	}
 	return pageBindings(m.page)
@@ -123,6 +125,12 @@ func (m Model) keysTitle() string {
 	}
 	if m.page == pageAttempts && m.attemptDetail {
 		return "an attempt"
+	}
+	if m.page == pageHistory && m.histDetail {
+		if m.histTab == tabTransfers {
+			return "a transfer"
+		}
+		return "a connection"
 	}
 	return m.page.title()
 }
