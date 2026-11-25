@@ -23,6 +23,7 @@ type Fake struct {
 	PeopleList       []people.Person
 	AttemptsSnapshot app.AttemptsSnapshot
 	ConnectionList   []server.Connection
+	HistorySnapshot  app.HistorySnapshot
 	SettingsSnapshot settings.Snapshot
 	// Clock is the fake clock that the user interface under test is given.
 	Clock *clock.Fake
@@ -123,6 +124,9 @@ func (f *Fake) Attempts() app.AttemptsSnapshot { return f.AttemptsSnapshot }
 // Connections returns ConnectionList.
 func (f *Fake) Connections() []server.Connection { return f.ConnectionList }
 
+// History returns HistorySnapshot.
+func (f *Fake) History() app.HistorySnapshot { return f.HistorySnapshot }
+
 // Settings returns SettingsSnapshot.
 func (f *Fake) Settings() settings.Snapshot { return f.SettingsSnapshot }
 
@@ -194,6 +198,9 @@ func (f *Fake) ClearAttempts(context.Context) error { return f.record("ClearAtte
 func (f *Fake) RemoveAttempt(_ context.Context, id string) error {
 	return f.record("RemoveAttempt", id)
 }
+
+// ClearHistory records the call.
+func (f *Fake) ClearHistory(context.Context) error { return f.record("ClearHistory") }
 
 // Disconnect records the call.
 func (f *Fake) Disconnect(_ context.Context, id string) error { return f.record("Disconnect", id) }

@@ -52,7 +52,7 @@ func TestNavigation(t *testing.T) {
 			}
 			// Every page is tapped from another one, by its icon: the words of a page can be on its
 			// content too.
-			icons := []func() m.IconData{m.Icons.Dashboard, m.Icons.People, m.Icons.History, m.Icons.Lan, m.Icons.Settings}
+			icons := []func() m.IconData{m.Icons.Dashboard, m.Icons.People, m.Icons.History, m.Icons.Lan, m.Icons.Schedule, m.Icons.Settings}
 			for i := range destinations {
 				tester.Tap(gluttertest.ByIcon(icons[i]()))
 				tester.PumpAndSettle()

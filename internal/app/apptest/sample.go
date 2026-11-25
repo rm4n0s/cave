@@ -10,6 +10,7 @@ import (
 	"github.com/rm4n0s/cave/internal/app"
 	"github.com/rm4n0s/cave/internal/core/attempts"
 	"github.com/rm4n0s/cave/internal/core/clock"
+	"github.com/rm4n0s/cave/internal/core/history"
 	"github.com/rm4n0s/cave/internal/core/people"
 	"github.com/rm4n0s/cave/internal/core/server"
 	"github.com/rm4n0s/cave/internal/core/settings"
@@ -86,7 +87,9 @@ func Empty(t testing.TB) *Fake {
 
 // Sample returns a fake with content that is the same on every run: a running server, three
 // people (one disabled, one without a key), one connection and nine attempts, one of each
-// result and one with a login name that a client made hostile. attempts.clear is "weekly".
+// result and one with a login name that a client made hostile, and a history of seven connections
+// (the one open now, one of each other reason) and eight transfers (every direction and
+// result, one with a long path). attempts.clear is "weekly".
 func Sample(t testing.TB) *Fake {
 	t.Helper()
 	f := &Fake{
@@ -114,7 +117,66 @@ func Sample(t testing.TB) *Fake {
 		},
 	}}
 	f.AttemptsSnapshot = app.AttemptsSnapshot{Entries: sampleAttempts(), LastClearedAt: ago(3 * day), NextClearAt: ahead(4 * day)}
+	f.HistorySnapshot = app.HistorySnapshot{Connections: sampleHistory(), Transfers: sampleTransfers(), LastClearedAt: ago(20 * day)}
 	return f
+}
+
+// The ids of the sample's connections in the history.
+const (
+	HistoryOpenID      = "c_0000000000000001"
+	HistoryClientID    = "c_00000000000000e2"
+	HistoryKeepAliveID = "c_00000000000000e6"
+)
+
+// sampleHistory returns the connections of the sample's history, the newest first: the one open
+// now (the connection of the registry) and one of every other reason.
+func sampleHistory() []history.Connection {
+	conn := func(id, person, personID, address string, since, lasted time.Duration, reason history.Reason) history.Connection {
+		c := history.Connection{
+			ID: id, PersonID: personID, PersonName: person, KeyFingerprint: fingerprint(11), Address: address,
+			ClientVersion: "SSH-2.0-OpenSSH_9.8", ConnectedAt: ago(since), Reason: reason,
+		}
+		if reason != "" && reason != history.ReasonUnknown {
+			c.EndedAt = ago(since - lasted)
+			c.BytesIn, c.BytesOut = 48_213, 1_402_118
+		}
+		return c
+	}
+	open := conn(HistoryOpenID, "alice", AliceID, "198.51.100.7", 12*time.Minute, 0, "")
+	open.Activities = []history.Activity{{Kind: "shell"}, {Kind: "local-forward", Detail: "127.0.0.1:5432"}}
+	client := conn(HistoryClientID, "alice", AliceID, "198.51.100.7", 3*time.Hour, 2*time.Hour+5*time.Minute, history.ReasonClient)
+	client.Activities = []history.Activity{{Kind: "sftp"}, {Kind: "exec", Detail: "git-upload-pack 'cave.git'"}}
+	return []history.Connection{
+		open,
+		client,
+		conn("c_00000000000000e3", "carol", CarolID, "2001:db8::42", 5*time.Hour, 45*time.Second, history.ReasonDisconnected),
+		conn("c_00000000000000e4", "bob", BobID, "192.0.2.50", 2*day+time.Hour, 12*time.Minute, history.ReasonPersonChanged),
+		conn("c_00000000000000e5", "alice", AliceID, "198.51.100.7", 3*day, 26*time.Hour, history.ReasonServerStopped),
+		conn(HistoryKeepAliveID, "carol", CarolID, "203.0.113.80", 4*day, 4*time.Minute, history.ReasonKeepAlive),
+		conn("c_00000000000000e7", "alice", AliceID, "198.51.100.7", 6*day, 0, history.ReasonUnknown),
+	}
+}
+
+// sampleTransfers returns the transfers of the sample's history, the newest first.
+func sampleTransfers() []history.Transfer {
+	id := func(n int) string { return fmt.Sprintf("t_%016x", n) }
+	tr := func(n int, conn, path string, closed, lasted time.Duration, down, up int64, created bool, result history.Result) history.Transfer {
+		return history.Transfer{
+			ID: id(n), ConnectionID: conn, PersonID: AliceID, PersonName: "alice", Path: path, OpenedAt: ago(closed + lasted),
+			ClosedAt: ago(closed), Downloaded: down, Uploaded: up, Created: created, Result: result,
+		}
+	}
+	long := "/home/ada/projects/" + strings.Repeat("deeply/nested/", 8) + "report-final-v2.pdf"
+	return []history.Transfer{
+		tr(1, HistoryOpenID, "/home/ada/notes.txt", 5*time.Minute, time.Second, 0, 2_048, true, history.ResultDone),
+		tr(2, HistoryClientID, "/home/ada/photos/beach.jpg", 2*time.Hour, 12*time.Second, 3_400_000, 0, false, history.ResultDone),
+		tr(3, HistoryClientID, "/home/ada/db.sqlite", 2*time.Hour+10*time.Minute, 3*time.Second, 40_960, 8_192, false, history.ResultDone),
+		tr(4, HistoryClientID, long, 2*time.Hour+20*time.Minute, 2*time.Second, 1_250_000, 0, false, history.ResultDone),
+		tr(5, HistoryClientID, "/home/ada/empty.log", 2*time.Hour+30*time.Minute, 0, 0, 0, true, history.ResultDone),
+		tr(6, HistoryClientID, "/home/ada/backup.tar", 2*time.Hour+40*time.Minute, 90*time.Second, 0, 52_428_800, true, history.ResultInterrupted),
+		tr(7, HistoryClientID, "/home/ada/disk-full.bin", 2*time.Hour+50*time.Minute, time.Second, 0, 4_096, true, history.ResultFailed),
+		tr(8, HistoryClientID, "/home/ada/big.iso", 3*time.Hour-time.Minute, 30*time.Second, 1_100_000_000, 0, false, history.ResultDone),
+	}
 }
 
 // sampleAttempts returns the nine entries, the one with the newest last attempt first.

@@ -40,6 +40,12 @@ func reveal(tester *gluttertest.Tester, key foundation.Key) {
 	tester.PumpAndSettle()
 }
 
+// openMenuItem finds the item of the open menu of a choice setting: its row keeps a copy of
+// each of its items first, and the open menu after them; the other rows have their own.
+func openMenuItem(key, text string) gluttertest.Finder {
+	return last{gluttertest.Descendant(gluttertest.ByKey(settingKey(key)), gluttertest.ByText(text))}
+}
+
 func scrollToEnd(tester *gluttertest.Tester) {
 	tester.Scroll(gluttertest.ByType[*m.SingleChildScrollView](), ui.Offset{Dy: 5000})
 	tester.PumpAndSettle()
@@ -90,7 +96,7 @@ func TestEverySettingIsOnThePage(t *testing.T) {
 			t.Errorf("%s: no control: %v", def.Key, err)
 		}
 	}
-	for _, group := range []string{"Server", "Attempts list", "Sessions", "File transfer and forwarding", "Notifications", "Appearance", "Host key", "About"} {
+	for _, group := range []string{"Server", "Attempts and history", "Sessions", "File transfer and forwarding", "Notifications", "Appearance", "Host key", "About"} {
 		if err := gluttertest.FindsOneWidget(tester, gluttertest.ByText(group)); err != nil {
 			t.Errorf("the group %s: %v", group, err)
 		}
@@ -145,7 +151,8 @@ func TestChangingEachKindOfSetting(t *testing.T) {
 		reveal(tester, settingKey("attempts.clear"))
 		tester.Tap(gluttertest.ByKey(settingKey("attempts.clear")))
 		tester.PumpAndSettle()
-		tester.Tap(last{gluttertest.ByText("Every 30 days")})
+		// The item of the open menu: every choice field keeps its words in the tree as well.
+		tester.Tap(openMenuItem("attempts.clear", "Every 30 days"))
 		tester.PumpAndSettle()
 		if got := f.Calls(); len(got) != 1 || got[0] != "Set(attempts.clear, monthly)" {
 			t.Errorf("calls = %q", got)
@@ -302,7 +309,7 @@ func TestChangeFromAttemptsScrollsToTheGroup(t *testing.T) {
 	tester := pumpOptions(t, apptest.Sample(t), testutil.Narrow, Options{Page: "attempts", Version: "0.7.0"}, syncRunner)
 	tapKey(tester, changeClearKey)
 	eventually(t, tester, "the page is Settings", func() bool { return currentPage(t, tester) == pageSettings })
-	card := gluttertest.ByKey(foundation.NewKey("group-Attempts list"))
+	card := gluttertest.ByKey(foundation.NewKey("group-Attempts and history"))
 	eventually(t, tester, "the group is in view", func() bool {
 		top, height := tester.TopLeft(card).Dy, tester.Size(card).Height
 		return top >= 0 && top+height <= testutil.Narrow.Height

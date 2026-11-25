@@ -100,7 +100,7 @@ func TestAPageThatIsNotKnownIsNamedSafely(t *testing.T) {
 }
 
 func TestPages(t *testing.T) {
-	want := []string{"overview", "people", "attempts", "connections", "settings"}
+	want := []string{"overview", "people", "attempts", "connections", "history", "settings"}
 	if !reflect.DeepEqual(Pages, want) {
 		t.Errorf("Pages = %v, want %v", Pages, want)
 	}

@@ -19,6 +19,7 @@ const (
 	pagePeople
 	pageAttempts
 	pageConnections
+	pageHistory
 	pageSettings
 )
 
@@ -34,6 +35,7 @@ var destinations = [...]destination{
 	{"People", func() m.Widget { return m.NewIcon(m.Icons.People()) }},
 	{"Attempts", func() m.Widget { return m.NewIcon(m.Icons.History()) }},
 	{"Connections", func() m.Widget { return m.NewIcon(m.Icons.Lan()) }},
+	{"History", func() m.Widget { return m.NewIcon(m.Icons.Schedule()) }},
 	{"Settings", func() m.Widget { return m.NewIcon(m.Icons.Settings()) }},
 }
 
@@ -115,6 +117,8 @@ func pageFor(v *view) m.Widget {
 		return newConnectionsPage(v)
 	case pageSettings:
 		return newSettingsPage(v)
+	case pageHistory:
+		// TODO(step 10.6): the History page.
 	}
 	return newHeadline(destinations[v.page].label)
 }

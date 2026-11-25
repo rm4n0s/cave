@@ -31,6 +31,7 @@ type Application interface {
 	People() []people.Person
 	Attempts() app.AttemptsSnapshot
 	Connections() []server.Connection
+	History() app.HistorySnapshot
 	Settings() settings.Snapshot
 
 	// Subscribe registers a function for the application's events and returns the function that
@@ -52,6 +53,7 @@ type Application interface {
 	RemoveKey(ctx context.Context, personID, keyID string) error
 	ClearAttempts(ctx context.Context) error
 	RemoveAttempt(ctx context.Context, id string) error
+	ClearHistory(ctx context.Context) error
 	Disconnect(ctx context.Context, id string) error
 	DisconnectAll()
 	NewHostKey(ctx context.Context) error

@@ -9,7 +9,7 @@ Usage: tcave [flags]
   -no-start
     	do not start the server at launch
   -page page
-    	the page to show first: overview, people, attempts, connections, settings
+    	the page to show first: overview, people, attempts, connections, history, settings
   -port port
     	listen on this port for this run, whatever the settings say
   -state-dir folder

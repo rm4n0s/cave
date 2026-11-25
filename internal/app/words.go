@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/rm4n0s/cave/internal/core/attempts"
+	"github.com/rm4n0s/cave/internal/core/history"
 	"github.com/rm4n0s/cave/internal/core/sanitize"
 	"github.com/rm4n0s/cave/internal/core/server"
 )
@@ -173,4 +174,90 @@ func QuitQuestion(conns []server.Connection) string {
 		return "1 person is connected. Quit and disconnect them?"
 	}
 	return strconv.Itoa(len(people)) + " people are connected. Quit and disconnect them?"
+}
+
+// ReasonText is the wording of how a connection of the history ended (docs/SPEC.md §11.8). A
+// connection that is open has no reason: it is "Connected now". A reason this program does not
+// know is shown as it is, made safe.
+func ReasonText(r history.Reason) string {
+	switch r {
+	case "":
+		return "Connected now"
+	case history.ReasonClient:
+		return "Client left"
+	case history.ReasonDisconnected:
+		return "Disconnected by you"
+	case history.ReasonPersonChanged:
+		return "Person or key changed"
+	case history.ReasonKeepAlive:
+		return "Stopped answering"
+	case history.ReasonServerStopped:
+		return "Server stopped"
+	case history.ReasonUnknown:
+		return "Unknown: Cave did not close"
+	}
+	return sanitize.Display(string(r), 32)
+}
+
+// ResultWord is the wording of how a transfer ended (docs/SPEC.md §11.8).
+func ResultWord(r history.Result) string {
+	switch r {
+	case history.ResultDone:
+		return "Done"
+	case history.ResultFailed:
+		return "Failed"
+	case history.ResultInterrupted:
+		return "Interrupted"
+	}
+	return sanitize.Display(string(r), 32)
+}
+
+// DirectionText is the wording of the direction of a transfer (docs/SPEC.md §11.8).
+func DirectionText(d history.Direction) string {
+	switch d {
+	case history.Download:
+		return "Download"
+	case history.Both:
+		return "Both"
+	}
+	return "Upload"
+}
+
+// DurationText says how long something lasted: "45 s", "12 min", "2 h 5 min", "3 d 4 h". The
+// smaller unit is left out when it is 0; times round down.
+func DurationText(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return strconv.Itoa(int(max(d, 0)/time.Second)) + " s"
+	case d < time.Hour:
+		return strconv.Itoa(int(d/time.Minute)) + " min"
+	case d < 24*time.Hour:
+		return withPart(int(d/time.Hour), " h", int(d%time.Hour/time.Minute), " min")
+	}
+	return withPart(int(d/(24*time.Hour)), " d", int(d%(24*time.Hour)/time.Hour), " h")
+}
+
+// withPart writes a number with its unit, and the smaller number with its unit when it is not 0.
+func withPart(n int, unit string, part int, partUnit string) string {
+	out := strconv.Itoa(n) + unit
+	if part > 0 {
+		out += " " + strconv.Itoa(part) + partUnit
+	}
+	return out
+}
+
+// SizeText says how many bytes: "0 B", "512 B", "1.4 KB", "3.2 MB", "1.1 GB", in units of 1000.
+func SizeText(n int64) string {
+	const unit = 1000
+	if n < unit {
+		return strconv.FormatInt(max(n, 0), 10) + " B"
+	}
+	value, prefix := float64(n)/unit, "K"
+	for _, p := range []string{"M", "G", "T"} {
+		if value < unit-0.05 {
+			break
+		}
+		value, prefix = value/unit, p
+	}
+	return strconv.FormatFloat(value, 'f', 1, 64) + " " + prefix + "B"
 }

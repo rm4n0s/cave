@@ -16,6 +16,7 @@ const (
 	TopicAttempts
 	TopicConnections
 	TopicSettings
+	TopicHistory
 )
 
 // Has says whether the set has every topic of other.

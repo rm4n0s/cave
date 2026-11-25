@@ -325,16 +325,17 @@ func (s *Server) serveAuthenticated(sshConn *ssh.ServerConn, channels <-chan ssh
 		activities: map[int]Activity{},
 		openedSeen: map[history.Activity]bool{},
 	}
+	// The history has the start before the registry shows the connection.
+	s.opts.History.Connected(history.Connection{
+		ID: c.info.ID, PersonID: c.info.PersonID, PersonName: c.info.PersonName, KeyFingerprint: c.info.KeyFingerprint,
+		Address: address, ClientVersion: c.info.ClientVersion, ConnectedAt: c.info.Since,
+	})
 	s.mu.Lock()
 	s.connections[c.info.ID] = c
 	channelHandlers, requestHandlers := s.channelHandlers, s.requestHandlers
 	s.mu.Unlock()
 	s.opts.Logger.Info("connected", "connection", c.info.ID, "person", c.info.PersonName, "address", address)
 	s.notify(ConnectionsChanged)
-	s.opts.History.Connected(history.Connection{
-		ID: c.info.ID, PersonID: c.info.PersonID, PersonName: c.info.PersonName, KeyFingerprint: c.info.KeyFingerprint,
-		Address: address, ClientVersion: c.info.ClientVersion, ConnectedAt: c.info.Since,
-	})
 
 	// The person may have been changed between the key's check and the registry: look again, so
 	// that no connection outlives a change that should have ended it.

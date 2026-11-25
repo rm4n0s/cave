@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/rm4n0s/cave/internal/core/attempts"
+	"github.com/rm4n0s/cave/internal/core/history"
 	"github.com/rm4n0s/cave/internal/core/server"
 )
 
@@ -164,6 +165,94 @@ func TestTheWordsHaveNoUnsafeText(t *testing.T) {
 	for _, o := range []attempts.Outcome{attempts.Accepted, attempts.UnknownName, attempts.WrongKey, attempts.NoKey, attempts.NotProven, attempts.Disabled, attempts.HandshakeFailed, attempts.Refused} {
 		if text := ResultText(o); text == "" || strings.ContainsAny(text, "\x1b\n\t") {
 			t.Errorf("ResultText(%q) = %q", o, text)
+		}
+	}
+}
+
+func TestHistoryWords(t *testing.T) {
+	reasons := []struct {
+		reason history.Reason
+		want   string
+	}{
+		{"", "Connected now"},
+		{history.ReasonClient, "Client left"},
+		{history.ReasonDisconnected, "Disconnected by you"},
+		{history.ReasonPersonChanged, "Person or key changed"},
+		{history.ReasonKeepAlive, "Stopped answering"},
+		{history.ReasonServerStopped, "Server stopped"},
+		{history.ReasonUnknown, "Unknown: Cave did not close"},
+		{"later\x1b[31m", "later�[31m"},
+	}
+	for _, tt := range reasons {
+		if got := ReasonText(tt.reason); got != tt.want {
+			t.Errorf("ReasonText(%q) = %q, want %q", tt.reason, got, tt.want)
+		}
+	}
+	results := []struct {
+		result history.Result
+		want   string
+	}{
+		{history.ResultDone, "Done"}, {history.ResultFailed, "Failed"}, {history.ResultInterrupted, "Interrupted"}, {"odd", "odd"},
+	}
+	for _, tt := range results {
+		if got := ResultWord(tt.result); got != tt.want {
+			t.Errorf("ResultWord(%q) = %q, want %q", tt.result, got, tt.want)
+		}
+	}
+	directions := []struct {
+		direction history.Direction
+		want      string
+	}{{history.Upload, "Upload"}, {history.Download, "Download"}, {history.Both, "Both"}}
+	for _, tt := range directions {
+		if got := DirectionText(tt.direction); got != tt.want {
+			t.Errorf("DirectionText(%v) = %q, want %q", tt.direction, got, tt.want)
+		}
+	}
+}
+
+func TestDurationText(t *testing.T) {
+	tests := []struct {
+		d    time.Duration
+		want string
+	}{
+		{-time.Second, "0 s"},
+		{0, "0 s"},
+		{45*time.Second + 900*time.Millisecond, "45 s"},
+		{time.Minute, "1 min"},
+		{12*time.Minute + 59*time.Second, "12 min"},
+		{2 * time.Hour, "2 h"},
+		{2*time.Hour + 5*time.Minute, "2 h 5 min"},
+		{24 * time.Hour, "1 d"},
+		{3*24*time.Hour + 4*time.Hour + 30*time.Minute, "3 d 4 h"},
+		{400 * 24 * time.Hour, "400 d"},
+	}
+	for _, tt := range tests {
+		if got := DurationText(tt.d); got != tt.want {
+			t.Errorf("DurationText(%v) = %q, want %q", tt.d, got, tt.want)
+		}
+	}
+}
+
+func TestSizeText(t *testing.T) {
+	tests := []struct {
+		n    int64
+		want string
+	}{
+		{-5, "0 B"},
+		{0, "0 B"},
+		{512, "512 B"},
+		{999, "999 B"},
+		{1000, "1.0 KB"},
+		{1_400, "1.4 KB"},
+		{999_949, "999.9 KB"},
+		{999_999, "1.0 MB"},
+		{3_200_000, "3.2 MB"},
+		{1_100_000_000, "1.1 GB"},
+		{5_000_000_000_000, "5.0 TB"},
+	}
+	for _, tt := range tests {
+		if got := SizeText(tt.n); got != tt.want {
+			t.Errorf("SizeText(%d) = %q, want %q", tt.n, got, tt.want)
 		}
 	}
 }

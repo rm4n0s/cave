@@ -97,6 +97,7 @@ Settings take effect at once. They are saved in `settings.json` in the configura
 | `server.startOnLaunch` | off | Start the server when Cave starts. By default you start it yourself. |
 | `server.keepAliveSeconds` | `60` | How often to check that a client is still there (0 to 3600; 0 turns it off). |
 | `attempts.clear` | `never` | When the attempts list is emptied by itself: `never`, `onStart`, `hourly`, `daily`, `weekly` or `monthly`. |
+| `history.clear` | `never` | When the history of connections and transfers is emptied by itself, with the same choices. |
 | `session.shell` | empty | The shell people get. Empty means your own shell (on Windows: `cmd.exe`). |
 | `session.acceptEnv` | `LANG`, `LC_*` | The names of the variables a client may set. `*` matches any run of characters. |
 | `sftp.enabled` | on | Allow `sftp` and `scp`. |

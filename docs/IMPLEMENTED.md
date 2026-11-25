@@ -635,3 +635,14 @@ Every step of `docs/IMPLEMENTATION.md` is implemented (M0 to M9). The milestones
 - **Proof**: none
 - **Manual checks**: none
 - **Glutter issues**: none
+
+## Step 10.4: History in the application
+- **Date**: 2026-11-25
+- **Branch**: feat/step-10.4-app-history
+- **Summary**: `internal/app` gives the history: `History()` (connections, transfers, last and next clear), `ClearHistory`, the topic `TopicHistory`, and the setting `history.clear` (the choices of `attempts.clear`: applied at start before the server, once a minute, and its period started when it changes). The words `ReasonText`, `ResultWord`, `DirectionText`, `DurationText` and `SizeText`; sentences for the history's Tags; the settings group "Attempts list" became "Attempts and history"; `--page history`. `apptest`: `Fake.HistorySnapshot` and `ClearHistory`, and a sample history of seven connections (one open, one of each other reason) and eight transfers.
+- **Decisions**: both UIs follow `app.Pages` and their tests check it, so the History page is in both now with only its title (the TUI's keys `1`–`6`, its page line that shows only numbers for the pages that are not current when the names do not fit, SPEC §12; the desktop's destination with the `Schedule` icon); steps 10.5 and 10.6 fill them in, and the plan says so. The server now writes a connection's start into the history before the registry shows it, so that a UI never sees a connection the history does not have (a test of step 10.2 saw that gap once). The desktop test of a choice setting finds the open menu's item inside the setting's row: every choice field keeps copies of its words in the tree, and with a second choice field the last copy was not the open menu's any more.
+- **Checks**: `scripts/checks.sh` passed: gofmt, vet (Linux, macOS, Windows), golangci-lint 0 issues, race tests as a debug build, cgo-free build and tests, Windows build, error tags (none untested), the Wine run.
+- **Tests**: the snapshot over a real application (a connection with an SFTP upload, its duration, `TopicHistory`), the clear (the open connection stays, nobody is disconnected), the history across a restart (the open connection ended `serverStopped`), `history.clear` `onStart` and `daily`; the words, table-driven; `history.clear` in the settings' tables; the usage goldens. Goldens: 74 TUI files (the page line, the settings group and its new row, the help's `1-6`) and 29 desktop PNGs (the History destination, the settings group), every one looked at.
+- **Proof**: none
+- **Manual checks**: none
+- **Glutter issues**: none

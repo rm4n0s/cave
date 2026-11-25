@@ -5,12 +5,13 @@ import "strings"
 // page is one of the five pages.
 type page int
 
-// The pages, in the order of the keys 1 to 5.
+// The pages, in the order of the keys 1 to 6.
 const (
 	pageOverview page = iota
 	pagePeople
 	pageAttempts
 	pageConnections
+	pageHistory
 	pageSettings
 	pageCount
 )
@@ -26,6 +27,8 @@ func (p page) title() string {
 		return "Attempts"
 	case pageConnections:
 		return "Connections"
+	case pageHistory:
+		return "History"
 	case pageSettings:
 		return "Settings"
 	}
@@ -51,7 +54,7 @@ type binding struct {
 // footer shows only the last two.
 func globalBindings() []binding {
 	return []binding{
-		{"1-5", "go to a page"},
+		{"1-6", "go to a page"},
 		{"tab", "next page"},
 		{"shift+tab", "previous page"},
 		{"up/down pgup/pgdn", "move in a list"},

@@ -1663,7 +1663,7 @@ The user, 2026-11-25: "show a history of connections/disconnections and duration
 
 **Read**: SPEC §10, §6, §9.11, §11.8. `internal/app/app.go`, `commands.go`, `words.go`, `messages.go`, `settings_text.go`, `flags.go`, `apptest/fake.go`, `apptest/sample.go`, `apptest/real.go`.
 
-**Files**: `internal/core/settings/schema.go` (`history.clear`); `internal/app/app.go`, `commands.go`, `events.go`, `words.go`, `messages.go`, `settings_text.go`, `flags.go` and their tests; `internal/app/apptest/*`; the `Application` interfaces of `internal/tui` and `internal/gui` only as far as the build needs (the pages come later).
+**Files**: `internal/core/settings/schema.go` (`history.clear`); `internal/app/app.go`, `commands.go`, `events.go`, `words.go`, `messages.go`, `settings_text.go`, `flags.go` and their tests; `internal/app/apptest/*`; in `internal/tui` and `internal/gui`, the History page in the list of pages with only its title (both UIs follow `app.Pages`, and their tests check it), and the goldens that this and the renamed settings group change.
 
 **Tasks**
 
@@ -1672,7 +1672,7 @@ The user, 2026-11-25: "show a history of connections/disconnections and duration
 3. `History() HistorySnapshot{Connections []history.Connection, Transfers []history.Transfer, LastClearedAt, NextClearAt time.Time}`; `ClearHistory(ctx) error`.
 4. Words: `ReasonText(history.Reason) string` (the sentences of §11.8), `ResultWord(history.Result) string`, `DirectionText(history.Direction) string`, `DurationText(time.Duration) string` (`45 s`, `12 min`, `2 h 5 min`, `3 d 4 h`), `SizeText(int64) string` (`0 B`, `512 B`, `1.4 KB`, `3.2 MB`, `1.1 GB`, decimal units). The settings group "Attempts list" becomes "Attempts and history" with `history.clear` in it (its label `Clear the history`, its line "When the history of connections and transfers is emptied.").
 5. Messages for the new Tags a command can return (`HistoryClearFailed`), and `TestEveryTagHasAMessage` stays green.
-6. `Pages` gets `history` between `connections` and `settings`.
+6. `Pages` gets `history` between `connections` and `settings`. Both UIs get the page with only its title, between Connections and Settings: the TUI's keys `1`–`6` and its narrow page line (SPEC §12), the desktop's destination (the `Schedule` icon). Steps 10.5 and 10.6 fill the pages in.
 7. `apptest`: `Fake.HistorySnapshot`, `ClearHistory` recorded in `Calls`; `Sample` has six connections (one open now, one of each other reason, one `unknown`) and eight transfers (every direction and result, one long path); `Empty` has none.
 
 **Tests**: `TestHistorySnapshot` and `TestClearHistory` over a real application (a client connects, uploads with the test SFTP client, disconnects: the snapshot has both records; a `Changed` has `TopicHistory`); `TestHistoryClearSetting` (`onStart` empties at the next `Open`, `daily` with the fake clock); the words, table-driven; `--page history`.
@@ -1689,7 +1689,7 @@ The user, 2026-11-25: "show a history of connections/disconnections and duration
 
 **Tasks**
 
-1. The pages are Overview, People, Attempts, Connections, History, Settings: keys `1`–`6`, `Tab` goes round six. The page line: when the names do not fit, the pages that are not current show only their number (`1 2 3 4 [5 History] 6`).
+1. (Done in step 10.4: the six pages, the keys `1`–`6` and the narrow page line.)
 2. The page's first line: `[Connections]  Transfers` (the current tab in brackets), then `last cleared …` and `next clear …` as the Attempts page words them.
 3. Connections table: `Who`, `Address` (flexible), `Connected` (`app.Ago`), `Duration` (`app.DurationText`, `connected now`, `—`), `Ended` (`app.ReasonText`). Empty: `No connections yet.`
 4. Transfers table: `Who`, `File` (flexible, cut at the start with `…` so the name of the file shows), `Direction`, `Size`, `When` (`app.Ago`), `Result`. Empty: `No files moved yet.`
@@ -1698,7 +1698,6 @@ The user, 2026-11-25: "show a history of connections/disconnections and duration
 **Tests**
 
 - `TestGoldenHistory`: the sample at 100×30 and 60×16 on each tab; the empty fake; the details of a connection and of a transfer; the question; a search.
-- `TestGoldenFrame` and the other page goldens are updated for the new page line: open every changed file.
 - With the fake: `C`, `y` → `ClearHistory()`; `t` switches; `6` shows Settings, `5` History.
 - With the real application: a client connects, uploads a file over SFTP and leaves; the page shows the connection with `Client left` and, on the Transfers tab, the file as an upload.
 
@@ -1721,14 +1720,13 @@ It must show alice's connection with its duration and `Client left`. Then the sa
 
 **Tasks**
 
-1. A destination History (an icon of history or a clock from `m.Icons`; look it up) between Connections and Settings, in the rail and the bottom bar.
+1. (Done in step 10.4: the destination History with the `Schedule` icon.)
 2. A segmented button Connections | Transfers, a search field, the line about clearing with a link to the setting, and "Clear history" (a dialog that asks first; its error in the dialog).
 3. The two tables of §11.8 with the words of `internal/app`; a selected row shows its details beside the table (wide) or under it (narrow), with the connection's transfers under a connection.
 
 **Tests**
 
 - `TestGoldenHistory`: light-wide and dark-narrow on each tab, a selected connection, a selected transfer, the empty fake, the clear dialog. Open every PNG.
-- The navigation goldens of the other pages are updated: open every changed PNG.
 - With the fake: the clear dialog → `ClearHistory()`; the segmented button switches; the search narrows the rows.
 - With the real application: a connection and an SFTP upload appear on the page.
 

@@ -28,6 +28,7 @@ const (
 	ServerStartOnLaunch    BoolKey    = "server.startOnLaunch"
 	ServerKeepAliveSeconds IntKey     = "server.keepAliveSeconds"
 	AttemptsClear          StringKey  = "attempts.clear"
+	HistoryClear           StringKey  = "history.clear"
 	SessionShell           StringKey  = "session.shell"
 	SessionAcceptEnv       StringsKey = "session.acceptEnv"
 	SFTPEnabled            BoolKey    = "sftp.enabled"
@@ -41,7 +42,7 @@ const (
 	UICloseToTray          BoolKey    = "ui.closeToTray"
 )
 
-// The choices of attempts.clear (docs/SPEC.md §8.4).
+// The choices of attempts.clear and history.clear (docs/SPEC.md §8.4, §9.11).
 const (
 	ClearNever   = "never"
 	ClearOnStart = "onStart"
@@ -109,6 +110,8 @@ var schema = []Def{
 	{Key: string(ServerStartOnLaunch), Kind: KindBool, Default: false},
 	{Key: string(ServerKeepAliveSeconds), Kind: KindInt, Default: 60, Min: 0, Max: 3600},
 	{Key: string(AttemptsClear), Kind: KindChoice, Default: ClearNever,
+		Choices: []string{ClearNever, ClearOnStart, ClearHourly, ClearDaily, ClearWeekly, ClearMonthly}},
+	{Key: string(HistoryClear), Kind: KindChoice, Default: ClearNever,
 		Choices: []string{ClearNever, ClearOnStart, ClearHourly, ClearDaily, ClearWeekly, ClearMonthly}},
 	{Key: string(SessionShell), Kind: KindString, Default: "", check: checkShell},
 	{Key: string(SessionAcceptEnv), Kind: KindStrings, Default: []string{"LANG", "LC_*"}, check: checkEnvPatterns},

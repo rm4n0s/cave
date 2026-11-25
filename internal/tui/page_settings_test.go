@@ -16,7 +16,7 @@ import (
 // selectSetting moves the selection of the Settings page to the setting.
 func selectSetting(t *testing.T, h *harness, key string) {
 	t.Helper()
-	h.key("5")
+	h.key("6")
 	h.key("home")
 	for i := 0; i < 40; i++ {
 		if item, ok := h.m().selectedSetting(); ok && item.kind == itemSetting && item.def.Key == key {
@@ -80,7 +80,7 @@ func TestGoldenSettings(t *testing.T) {
 				m.opts.ConfigDir, m.opts.StateDir, m.opts.Version = "/home/ada/.config/cave", "/home/ada/.local/state/cave", "0.6.0"
 				return m
 			}()
-			h.key("5")
+			h.key("6")
 			tt.setup(t, h)
 			h.golden("settings-" + tt.name)
 		})
@@ -89,7 +89,7 @@ func TestGoldenSettings(t *testing.T) {
 
 func TestEverySettingIsOnThePage(t *testing.T) {
 	h := newFakeHarness(t, apptest.Sample(t), 100, 50)
-	h.key("5")
+	h.key("6")
 	screen := h.screen()
 	for _, def := range settings.Schema() {
 		var label string
@@ -102,7 +102,7 @@ func TestEverySettingIsOnThePage(t *testing.T) {
 			t.Errorf("%s: the label %q is not on the page", def.Key, label)
 		}
 	}
-	for _, group := range []string{"Server", "Attempts list", "Sessions", "File transfer and forwarding", "Notifications", "Appearance"} {
+	for _, group := range []string{"Server", "Attempts and history", "Sessions", "File transfer and forwarding", "Notifications", "Appearance"} {
 		if !strings.Contains(screen, group) {
 			t.Errorf("the group %q is not on the page", group)
 		}
@@ -118,7 +118,7 @@ func TestEverySettingIsOnThePage(t *testing.T) {
 func TestSettingValuesAreWordedByKind(t *testing.T) {
 	f := apptest.Sample(t)
 	h := newFakeHarness(t, f, 100, 50)
-	h.key("5")
+	h.key("6")
 	lines := strings.Split(h.screen(), "\n")
 	row := func(label string) string {
 		for _, l := range lines {
@@ -263,7 +263,7 @@ func TestDesktopOnlySettingsAreNotChanged(t *testing.T) {
 func TestTheHostKey(t *testing.T) {
 	f := apptest.Sample(t)
 	h := newFakeHarness(t, f, 100, 30)
-	h.keys("5", "end")
+	h.keys("6", "end")
 	if item, _ := h.m().selectedSetting(); item.kind != itemHostKey {
 		t.Fatalf("the last row is %v, want the host key", item.kind)
 	}
@@ -284,7 +284,7 @@ func TestTheHostKey(t *testing.T) {
 
 func TestOnlyTheRowsThatCanChangeAreSelected(t *testing.T) {
 	h := newFakeHarness(t, apptest.Sample(t), 100, 30)
-	h.key("5")
+	h.key("6")
 	seen := 0
 	for i := 0; i < 40; i++ {
 		item, ok := h.m().selectedSetting()
@@ -308,7 +308,7 @@ func TestOnlyTheRowsThatCanChangeAreSelected(t *testing.T) {
 
 func TestSettingsScrollsToTheSelection(t *testing.T) {
 	h := newFakeHarness(t, apptest.Sample(t), 100, 20)
-	h.key("5")
+	h.key("6")
 	if !strings.Contains(h.screen(), "Server") || strings.Contains(h.screen(), "Version") {
 		t.Errorf("the top:\n%s", h.screen())
 	}
@@ -332,7 +332,7 @@ func TestSettingsScrollsToTheSelection(t *testing.T) {
 func TestSettingsFitEverySize(t *testing.T) {
 	for _, size := range [][2]int{{60, 16}, {80, 24}, {100, 30}, {137, 50}} {
 		h := newFakeHarness(t, apptest.Sample(t), size[0], size[1])
-		h.key("5")
+		h.key("6")
 		for i := 0; i < 20; i++ {
 			lines := strings.Split(h.screen(), "\n")
 			if len(lines) != size[1] {
@@ -420,7 +420,7 @@ func TestTheAttemptsClearingWithTheRealApplication(t *testing.T) {
 func TestANewHostKeyWithTheRealApplication(t *testing.T) {
 	r := apptest.Open(t, nil)
 	h := newHarness(t, r.App, r.Clock, 120, 30)
-	h.keys("5", "end")
+	h.keys("6", "end")
 	before := r.App.Server().HostKeyFingerprint
 	if !strings.Contains(h.screen(), before) {
 		t.Fatalf("the fingerprint is not on the page:\n%s", h.screen())

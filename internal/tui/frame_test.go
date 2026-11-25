@@ -93,12 +93,13 @@ func TestPageKeys(t *testing.T) {
 		{"2", []string{"2"}, pagePeople},
 		{"3", []string{"3"}, pageAttempts},
 		{"4", []string{"4"}, pageConnections},
-		{"5", []string{"5"}, pageSettings},
+		{"5", []string{"5"}, pageHistory},
+		{"6", []string{"6"}, pageSettings},
 		{"tab", []string{"tab"}, pagePeople},
-		{"tab from the last page", []string{"5", "tab"}, pageOverview},
+		{"tab from the last page", []string{"6", "tab"}, pageOverview},
 		{"shift+tab", []string{"3", "shift+tab"}, pagePeople},
 		{"shift+tab from the first page", []string{"shift+tab"}, pageSettings},
-		{"a key that is not a page", []string{"3", "6", "0", "x"}, pageAttempts},
+		{"a key that is not a page", []string{"3", "7", "0", "x"}, pageAttempts},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -244,7 +245,7 @@ func TestQuitKeys(t *testing.T) {
 func TestTheFirstPage(t *testing.T) {
 	for name, want := range map[string]page{
 		"": pageOverview, "overview": pageOverview, "people": pagePeople, "attempts": pageAttempts,
-		"connections": pageConnections, "settings": pageSettings, "nonsense": pageOverview,
+		"connections": pageConnections, "history": pageHistory, "settings": pageSettings, "nonsense": pageOverview,
 	} {
 		f := apptest.Empty(t)
 		m := NewModel(ctx, f, f.Clock, Options{Page: name})

@@ -1,5 +1,5 @@
 Cave   running on port 2222                                                 1 connected · 9 attempts
-1 Overview  2 People  3 Attempts  4 Connections  [5 Settings]                                       
+1 Overview  2 People  3 Attempts  4 Connections  5 History  [6 Settings]                            
 ────────────────────────────────────────────────────────────────────────────────────────────────────
 Server                                                                                              
 > Port                                   2222                                                       
@@ -7,8 +7,9 @@ Server
   Start when Cave starts                 off                                                        
   Keep-alive (seconds)                   60                                                         
                                                                                                     
-Attempts list                                                                                       
+Attempts and history                                                                                
   Clear the list                         weekly                                                     
+  Clear the history                      never                                                      
                                                                                                     
 Sessions                                                                                            
   Shell                                  —                                                          
@@ -19,7 +20,6 @@ File transfer and forwarding
   Local forwarding                       on                                                         
   Remote forwarding                      on                                                         
   Forwarded ports open to the network    off                                                        
-  Agent forwarding                       on                                                         
                                                                                                     
 The port Cave listens on for connections.                                                           
                                                                                                     

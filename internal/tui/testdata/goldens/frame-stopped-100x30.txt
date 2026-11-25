@@ -1,5 +1,5 @@
 Cave   stopped                                                              1 connected · 9 attempts
-[1 Overview]  2 People  3 Attempts  4 Connections  5 Settings                                       
+[1 Overview]  2 People  3 Attempts  4 Connections  5 History  6 Settings                            
 ────────────────────────────────────────────────────────────────────────────────────────────────────
 Server      stopped   (s starts it)                                                                 
 Host key    SHA256:HMRXchnsx38BHMRXchnsx38BHMRXchnsx38BHMRXchn                                      

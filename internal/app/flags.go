@@ -25,7 +25,7 @@ const (
 
 // Pages are the names of the pages of both user interfaces, in the order they are shown; --page
 // takes one of them. It is never changed.
-var Pages = []string{"overview", "people", "attempts", "connections", "settings"}
+var Pages = []string{"overview", "people", "attempts", "connections", "history", "settings"}
 
 // Flags are the flags both programs take (docs/SPEC.md §5.1, §6, §9.1, §15, §16).
 type Flags struct {

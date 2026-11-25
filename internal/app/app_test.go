@@ -675,8 +675,8 @@ func TestEventsAreCoalesced(t *testing.T) {
 }
 
 func TestTopics(t *testing.T) {
-	all := TopicServer | TopicPeople | TopicAttempts | TopicConnections | TopicSettings
-	for _, topic := range []Topics{TopicServer, TopicPeople, TopicAttempts, TopicConnections, TopicSettings} {
+	all := TopicServer | TopicPeople | TopicAttempts | TopicConnections | TopicSettings | TopicHistory
+	for _, topic := range []Topics{TopicServer, TopicPeople, TopicAttempts, TopicConnections, TopicSettings, TopicHistory} {
 		if !all.Has(topic) || topic.Has(all) || Topics(0).Has(topic) {
 			t.Errorf("topic %d", topic)
 		}

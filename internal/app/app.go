@@ -189,6 +189,7 @@ func (a *App) open(ctx context.Context) error {
 
 	// The list is cleared before anybody can connect (docs/SPEC.md §8.4).
 	a.attempts.ApplyPolicy(a.policy(), true)
+	a.history.ApplyPolicy(a.historyPolicy(), true)
 
 	a.server = server.New(server.Options{
 		People: a.people, Attempts: a.attempts, History: a.history, HostKey: a.hostKey.Signer(), Settings: a.settings, Clock: a.clock, Logger: a.logger,
@@ -204,6 +205,7 @@ func (a *App) open(ctx context.Context) error {
 		a.settings.Subscribe(func(string) { a.changed(TopicSettings) }),
 		a.people.Subscribe(func(people.Change) { a.changed(TopicPeople) }),
 		a.attempts.Subscribe(func() { a.changed(TopicAttempts) }),
+		a.history.Subscribe(func() { a.changed(TopicHistory) }),
 		a.server.Subscribe(func(change server.Change) {
 			if change == server.ConnectionsChanged {
 				a.changed(TopicConnections)
@@ -295,6 +297,11 @@ func (a *App) policy() attempts.Policy {
 	return attempts.Policy(a.settings.Snapshot().String(settings.AttemptsClear))
 }
 
+// historyPolicy returns the setting history.clear, which has the choices of attempts.clear.
+func (a *App) historyPolicy() attempts.Policy {
+	return attempts.Policy(a.settings.Snapshot().String(settings.HistoryClear))
+}
+
 // armPolicyCheck sets the next look at the attempts list's clearing. The caller holds the lock.
 func (a *App) armPolicyCheck() {
 	if a.closed {
@@ -302,6 +309,7 @@ func (a *App) armPolicyCheck() {
 	}
 	a.policyTimer = a.clock.AfterFunc(policyCheck, func() {
 		a.attempts.ApplyPolicy(a.policy(), false)
+		a.history.ApplyPolicy(a.historyPolicy(), false)
 		a.mu.Lock()
 		defer a.mu.Unlock()
 		a.armPolicyCheck()
@@ -381,6 +389,10 @@ func (a *App) Set(ctx context.Context, key string, value any) error {
 	case string(settings.AttemptsClear):
 		if before.String(settings.AttemptsClear) != after.String(settings.AttemptsClear) {
 			a.attempts.PolicyChanged(a.policy())
+		}
+	case string(settings.HistoryClear):
+		if before.String(settings.HistoryClear) != after.String(settings.HistoryClear) {
+			a.history.PolicyChanged(a.historyPolicy())
 		}
 	}
 	return nil
@@ -473,6 +485,26 @@ type AttemptsSnapshot struct {
 // Attempts returns the attempts list.
 func (a *App) Attempts() AttemptsSnapshot {
 	return AttemptsSnapshot{Entries: a.attempts.Entries(), LastClearedAt: a.attempts.LastClearedAt(), NextClearAt: a.attempts.NextClearAt()}
+}
+
+// HistorySnapshot is the history of connections and transfers (docs/SPEC.md §9.11).
+type HistorySnapshot struct {
+	// Connections are the connections that were authenticated, the newest first.
+	Connections []history.Connection
+	// Transfers are the files moved over SFTP, the newest first.
+	Transfers []history.Transfer
+	// LastClearedAt is when the history was last emptied; the zero time when it never was.
+	LastClearedAt time.Time
+	// NextClearAt is when history.clear empties it next; the zero time without a period.
+	NextClearAt time.Time
+}
+
+// History returns the history.
+func (a *App) History() HistorySnapshot {
+	return HistorySnapshot{
+		Connections: a.history.Connections(), Transfers: a.history.Transfers(),
+		LastClearedAt: a.history.LastClearedAt(), NextClearAt: a.history.NextClearAt(),
+	}
 }
 
 // Connections returns the connections that are established, and what each has open.

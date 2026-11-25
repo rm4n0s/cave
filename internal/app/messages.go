@@ -30,7 +30,7 @@ var messages = map[string]string{
 	"FlagsHelp":               "Run with --help to see the flags.",
 	"FlagsUnexpectedArgument": "Cave takes flags only, not {argument}. Run with --help to see them.",
 	"FlagsPortInvalid":        "A port is a number from 1 to 65535, not {port}.",
-	"FlagsPageInvalid":        "There is no page named {page}. The pages are overview, people, attempts, connections and settings.",
+	"FlagsPageInvalid":        "There is no page named {page}. The pages are overview, people, attempts, connections, history and settings.",
 
 	// People and keys.
 	"PersonNameInvalid":  "A name has 1 to 32 letters, digits, dots, underscores or hyphens, and does not start with a dot or a hyphen.",
@@ -57,6 +57,17 @@ var messages = map[string]string{
 	"AttemptsEncodeFailed": "The attempts list could not be saved to {path}: {cause}.",
 	"AttemptsVersionUnsupported": "The attempts file {path} was written by another version of Cave (it has version {version}; " +
 		"this Cave reads version {supported}).",
+
+	// The history.
+	"HistoryOpenCancelled":  "The history {path} was not read: the request was cancelled.",
+	"HistoryReadFailed":     "The history {path} cannot be read: {cause}. Fix it or move it away.",
+	"HistoryFileOpenFailed": "The history {path} cannot be opened: {cause}.",
+	"HistoryWriteFailed":    "The history {path} cannot be written: {cause}.",
+	"HistoryRotateFailed":   "The full history {path} could not be moved aside: {cause}.",
+	"HistoryEncodeFailed":   "A record of the history could not be written: {cause}.",
+	"HistoryClearCancelled": "The history was not cleared: the request was cancelled.",
+	"HistoryClearFailed":    "The history could not be cleared: {path} cannot be removed ({cause}).",
+	"HistoryCloseFailed":    "The history {path} could not be closed: {cause}.",
 
 	// The host key.
 	"HostKeyGenerateFailed":  "A new host key could not be made: {cause}.",

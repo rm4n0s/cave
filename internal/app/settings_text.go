@@ -17,7 +17,7 @@ type SettingText struct {
 // The groups of the settings, in the order they are shown.
 const (
 	GroupServer        = "Server"
-	GroupAttempts      = "Attempts list"
+	GroupAttempts      = "Attempts and history"
 	GroupSessions      = "Sessions"
 	GroupForwarding    = "File transfer and forwarding"
 	GroupNotifications = "Notifications"
@@ -37,6 +37,8 @@ var settingTexts = []SettingText{
 		Help: "How often Cave checks that a connected client is still there, and disconnects one that stays silent for three more checks; 0 turns this off."},
 	{Key: "attempts.clear", Group: GroupAttempts, Label: "Clear the list",
 		Help: "When the list of connection attempts is emptied by itself."},
+	{Key: "history.clear", Group: GroupAttempts, Label: "Clear the history",
+		Help: "When the history of connections and transfers is emptied by itself."},
 	{Key: "session.shell", Group: GroupSessions, Label: "Shell",
 		Help: "The shell that people get; empty means your own shell."},
 	{Key: "session.acceptEnv", Group: GroupSessions, Label: "Variables clients may set",

@@ -72,22 +72,33 @@ func (m Model) stateText() string {
 	return m.st.dim.Render("stopped")
 }
 
-// tabs is the second line: the pages, with the current one in brackets and reversed.
+// tabs is the second line: the pages, with the current one in brackets and reversed. When the
+// names do not fit, the pages that are not current show only their number (docs/SPEC.md §12).
 func (m Model) tabs() string {
-	parts := make([]string, pageCount)
-	for p := page(0); p < pageCount; p++ {
-		label := strconv.Itoa(int(p)+1) + " " + p.title()
-		if p == m.page {
-			parts[p] = m.st.current.Render("[" + label + "]")
-		} else {
-			parts[p] = label
+	line := func(short bool, separator string) string {
+		parts := make([]string, pageCount)
+		for p := page(0); p < pageCount; p++ {
+			label := strconv.Itoa(int(p)+1) + " " + p.title()
+			switch {
+			case p == m.page:
+				parts[p] = m.st.current.Render("[" + label + "]")
+			case short:
+				parts[p] = strconv.Itoa(int(p) + 1)
+			default:
+				parts[p] = label
+			}
+		}
+		return strings.Join(parts, separator)
+	}
+	for _, try := range []struct {
+		short     bool
+		separator string
+	}{{false, "  "}, {false, " "}, {true, "  "}} {
+		if s := line(try.short, try.separator); lipgloss.Width(s) <= m.width {
+			return s
 		}
 	}
-	separator := "  "
-	if lipgloss.Width(strings.Join(parts, separator)) > m.width {
-		separator = " "
-	}
-	return strings.Join(parts, separator)
+	return line(true, " ")
 }
 
 // body is the part between the rules: the help, or the current page. It has exactly height

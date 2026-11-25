@@ -80,6 +80,11 @@ func (a *App) RemoveAttempt(_ context.Context, id string) error {
 	return a.attempts.Remove(id)
 }
 
+// ClearHistory empties the history; the connections that are open stay in it.
+func (a *App) ClearHistory(ctx context.Context) error {
+	return a.history.Clear(ctx)
+}
+
 // Disconnect closes one connection, by the ID that Connections gives.
 func (a *App) Disconnect(_ context.Context, id string) error {
 	return a.server.Disconnect(id)

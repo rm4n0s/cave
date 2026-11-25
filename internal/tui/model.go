@@ -240,7 +240,7 @@ func (m Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 		return m.quit()
 	case "?":
 		m.help = true
-	case "1", "2", "3", "4", "5":
+	case "1", "2", "3", "4", "5", "6":
 		m.page = page(name[0] - '1')
 	case "tab":
 		m.page = (m.page + 1) % pageCount
@@ -258,7 +258,8 @@ func (m Model) key(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 			return m.keyConnections(msg)
 		case pageSettings:
 			return m.keySettings(msg)
-		case pageOverview, pageCount:
+		case pageOverview, pageHistory, pageCount:
+			// TODO(step 10.5): the keys of the History page.
 		}
 	}
 	return m, nil
