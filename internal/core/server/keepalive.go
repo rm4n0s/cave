@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/rm4n0s/cave/internal/core/clock"
+	"github.com/rm4n0s/cave/internal/core/history"
 	"github.com/rm4n0s/cave/internal/core/settings"
 )
 
@@ -14,16 +15,23 @@ import (
 // whether it is there, before its connection is closed (docs/SPEC.md §9.9).
 const KeepAliveMax = 3
 
-// countingConn is a connection that counts the bytes that arrive on it.
+// countingConn is a connection that counts the bytes that arrive on it and that are sent on it.
 type countingConn struct {
 	net.Conn
-	arrived *atomic.Int64
+	arrived, sent *atomic.Int64
 }
 
 // Read reads from the connection and counts what arrived.
 func (c countingConn) Read(p []byte) (int, error) {
 	n, err := c.Conn.Read(p)
 	c.arrived.Add(int64(n))
+	return n, err
+}
+
+// Write writes to the connection and counts what was sent.
+func (c countingConn) Write(p []byte) (int, error) {
+	n, err := c.Conn.Write(p)
+	c.sent.Add(int64(n))
 	return n, err
 }
 
@@ -103,6 +111,7 @@ func (k *keepAlive) look() {
 		k.last, k.silent = arrived, 0
 	case k.silent >= KeepAliveMax:
 		k.stopped = true
+		k.conn.setEnd(history.ReasonKeepAlive)
 		k.conn.server.opts.Logger.Info("connection timed out", "connection", k.conn.info.ID, "person", k.conn.info.PersonName, "silentIntervals", k.silent)
 		_ = k.conn.ssh.Close() // the connection's loops see the close
 		return

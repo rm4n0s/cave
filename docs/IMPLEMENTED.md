@@ -613,3 +613,14 @@ Every step of `docs/IMPLEMENTATION.md` is implemented (M0 to M9). The milestones
 - **Proof**: none
 - **Manual checks**: none
 - **Glutter issues**: none
+
+## Step 10.2: Recording connections
+- **Date**: 2026-11-25
+- **Branch**: feat/step-10.2-record-connections
+- **Summary**: The server writes every authenticated connection into the history (SPEC §9.11): its start once it is in the registry, its end with the clock's time, the reason, the bytes that arrived and were sent on the TCP connection (counted from the accept), and the activities it opened, each once, at most 32. The reason is the first cause Cave noted before closing it: `disconnected` (Disconnect, Disconnect all), `personChanged` (a change of the people, also one during the handshake), `keepalive`, `serverStopped`; none is `client`. The application opens the store and closes it after the server.
+- **Decisions**: three tests that failed now and then under load on `main` as well, each a race of the test and not of Cave, now wait for what they check: `TestAnIdleClientThatAnswersStays` (`waitArrived` waits until the whole answer has arrived), `TestRemoteForward` (the last line of the log), and the GUI's `TestQuitAsksOnlyWithConnections` and `TestTrayFollowsTheServer` (the second question, the icon).
+- **Checks**: `scripts/checks.sh` passed: gofmt, vet (Linux, macOS, Windows), golangci-lint 0 issues, race tests as a debug build, cgo-free build and tests, Windows build, error tags (none untested), the Wine run.
+- **Tests**: every reason (the client leaves, Disconnect, DisconnectAll, the person disabled, renamed, removed, the key removed, Stop, the keepalive) with its duration on the fake clock and the record's fields; activities each once in order and the limit; the bytes of 1 MiB sent; a refused attempt is not in the history; `countingConn` counts what is sent.
+- **Proof**: none
+- **Manual checks**: none
+- **Glutter issues**: none

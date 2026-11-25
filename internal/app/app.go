@@ -14,6 +14,7 @@ import (
 	"github.com/rm4n0s/cave/internal/core/attempts"
 	"github.com/rm4n0s/cave/internal/core/clock"
 	"github.com/rm4n0s/cave/internal/core/forward"
+	"github.com/rm4n0s/cave/internal/core/history"
 	"github.com/rm4n0s/cave/internal/core/hostkey"
 	"github.com/rm4n0s/cave/internal/core/logging"
 	"github.com/rm4n0s/cave/internal/core/netinfo"
@@ -83,6 +84,7 @@ type App struct {
 	settings *settings.Store
 	people   *people.Store
 	attempts *attempts.List
+	history  *history.Store
 	server   *server.Server
 	// logCloser closes the log file; nil when the logger was given.
 	logCloser io.Closer
@@ -177,6 +179,9 @@ func (a *App) open(ctx context.Context) error {
 	if a.attempts, err = attempts.Open(ctx, attempts.Options{Dirs: dirs, Clock: a.clock, Logger: a.logger}); err != nil {
 		return err
 	}
+	if a.history, err = history.Open(ctx, history.Options{Dirs: dirs, Clock: a.clock, Logger: a.logger}); err != nil {
+		return err
+	}
 	if a.hostKey, err = hostkey.LoadOrCreate(ctx, dirs); err != nil {
 		return err
 	}
@@ -186,7 +191,7 @@ func (a *App) open(ctx context.Context) error {
 	a.attempts.ApplyPolicy(a.policy(), true)
 
 	a.server = server.New(server.Options{
-		People: a.people, Attempts: a.attempts, HostKey: a.hostKey.Signer(), Settings: a.settings, Clock: a.clock, Logger: a.logger,
+		People: a.people, Attempts: a.attempts, History: a.history, HostKey: a.hostKey.Signer(), Settings: a.settings, Clock: a.clock, Logger: a.logger,
 		Version: a.opts.Version, Address: a.listenAddress,
 	})
 	session.Register(a.server, session.Options{
@@ -234,6 +239,10 @@ func (a *App) release() error {
 		cancel()
 	}
 	a.unsubscribe = nil
+	if a.history != nil {
+		// Kept after its Close, which makes it write nothing more: a snapshot may still read it.
+		keep(a.history.Close())
+	}
 	if a.logCloser != nil {
 		keep(a.logCloser.Close())
 		a.logCloser = nil

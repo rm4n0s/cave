@@ -18,6 +18,7 @@ import (
 	"github.com/rm4n0s/cave/internal/core/attempts"
 	"github.com/rm4n0s/cave/internal/core/clock"
 	"github.com/rm4n0s/cave/internal/core/errtest"
+	"github.com/rm4n0s/cave/internal/core/history"
 	"github.com/rm4n0s/cave/internal/core/hostkey"
 	"github.com/rm4n0s/cave/internal/core/people"
 	"github.com/rm4n0s/cave/internal/core/settings"
@@ -61,6 +62,7 @@ type fixture struct {
 	server   *Server
 	people   *people.Store
 	attempts *attempts.List
+	history  *history.Store
 	settings *settings.Store
 	clock    *clock.Fake
 	hostKey  *hostkey.HostKey
@@ -85,6 +87,14 @@ func newStopped(t *testing.T) *fixture {
 	if f.settings, err = settings.Open(ctx, dirs); err != nil {
 		t.Fatal(err)
 	}
+	if f.history, err = history.Open(ctx, history.Options{Dirs: dirs, Clock: f.clock, Logger: logger}); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := f.history.Close(); err != nil {
+			t.Errorf("history: %v", err)
+		}
+	})
 	if f.hostKey, err = hostkey.LoadOrCreate(ctx, dirs); err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +104,7 @@ func newStopped(t *testing.T) *fixture {
 		t.Fatal(err)
 	}
 	f.server = New(Options{
-		People: f.people, Attempts: f.attempts, HostKey: f.hostKey.Signer(), Settings: f.settings, Clock: f.clock, Logger: logger,
+		People: f.people, Attempts: f.attempts, History: f.history, HostKey: f.hostKey.Signer(), Settings: f.settings, Clock: f.clock, Logger: logger,
 		Version: "test", Address: func(settings.Snapshot) string { return "127.0.0.1:0" },
 	})
 	t.Cleanup(func() {

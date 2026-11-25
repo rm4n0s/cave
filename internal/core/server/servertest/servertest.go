@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"github.com/rm4n0s/cave/internal/core/attempts"
 	"github.com/rm4n0s/cave/internal/core/clock"
+	"github.com/rm4n0s/cave/internal/core/history"
 	"github.com/rm4n0s/cave/internal/core/hostkey"
 	"github.com/rm4n0s/cave/internal/core/people"
 	"github.com/rm4n0s/cave/internal/core/server"
@@ -58,9 +59,10 @@ type Fixture struct {
 	t testing.TB
 	// Server is the server; a test registers its handlers on it before Start.
 	Server *server.Server
-	// People, Attempts and Settings are the server's stores.
+	// People, Attempts, History and Settings are the server's stores.
 	People   *people.Store
 	Attempts *attempts.List
+	History  *history.Store
 	Settings *settings.Store
 	// Clock is the fake clock everything runs on.
 	Clock *clock.Fake
@@ -93,6 +95,14 @@ func New(t testing.TB) *Fixture {
 	if f.Settings, err = settings.Open(ctx, dirs); err != nil {
 		t.Fatalf("servertest: %v", err)
 	}
+	if f.History, err = history.Open(ctx, history.Options{Dirs: dirs, Clock: f.Clock, Logger: f.Logger}); err != nil {
+		t.Fatalf("servertest: %v", err)
+	}
+	t.Cleanup(func() {
+		if err := f.History.Close(); err != nil {
+			t.Errorf("servertest: history: %v", err)
+		}
+	})
 	if f.HostKey, err = hostkey.LoadOrCreate(ctx, dirs); err != nil {
 		t.Fatalf("servertest: %v", err)
 	}
@@ -103,7 +113,7 @@ func New(t testing.TB) *Fixture {
 	}
 	f.Home = homeDir(t)
 	f.Server = server.New(server.Options{
-		People: f.People, Attempts: f.Attempts, HostKey: f.HostKey.Signer(), Settings: f.Settings, Clock: f.Clock, Logger: f.Logger,
+		People: f.People, Attempts: f.Attempts, History: f.History, HostKey: f.HostKey.Signer(), Settings: f.Settings, Clock: f.Clock, Logger: f.Logger,
 		Version: "test", Address: func(settings.Snapshot) string { return "127.0.0.1:0" },
 	})
 	t.Cleanup(func() {

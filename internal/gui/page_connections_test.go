@@ -148,7 +148,7 @@ func TestQuitAsksOnlyWithConnections(t *testing.T) {
 		if tester.RequestWindowClose(ui.ImplicitViewID) {
 			t.Fatal("the second request was allowed")
 		}
-		tester.PumpAndSettle()
+		eventually(t, tester, "the question again", func() bool { return tester.Exists(gluttertest.ByKey(confirmYesKey)) })
 		tapKey(tester, confirmYesKey)
 		eventually(t, tester, "the exit", func() bool { return tester.ExitRequests() == 1 })
 	})

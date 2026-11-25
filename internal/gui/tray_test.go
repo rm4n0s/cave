@@ -123,9 +123,8 @@ func TestTrayFollowsTheServer(t *testing.T) {
 	f.ServerSnapshot.State = server.Running
 	f.Emit(app.Changed{Topics: app.TopicServer})
 	eventually(t, a.tester, "the menu offers to stop again", func() bool { return a.desktop.TrayMenu()[1] == "Stop server" })
-	if !reflect.DeepEqual(pixmap(), running) {
-		t.Error("the icon is not the running one again")
-	}
+	// The icon is set apart from the menu: wait for it too.
+	eventually(t, a.tester, "the icon is the running one again", func() bool { return reflect.DeepEqual(pixmap(), running) })
 }
 
 func TestTrayIconGolden(t *testing.T) {

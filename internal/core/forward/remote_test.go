@@ -171,6 +171,11 @@ func TestRemoteForward(t *testing.T) {
 	}
 	f.remoteForwards(0)
 	refused(t, address)
+	// The forwarded connection's goroutine logs its end a moment after both sides are done.
+	deadline := time.Now().Add(servertest.WaitFor)
+	for !strings.Contains(f.Log.String(), `"msg":"forwarded connection closed"`) && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
 	log := f.Log.String()
 	for _, want := range []string{`"msg":"remote forward opened"`, `"msg":"remote forward closed"`, `"msg":"forwarded connection closed"`, `"address":"` + address + `"`} {
 		if !strings.Contains(log, want) {

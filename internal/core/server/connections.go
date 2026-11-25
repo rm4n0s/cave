@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rm4n0s/cave/internal/core/history"
 	"github.com/rm4n0s/cave/internal/core/ids"
 	"github.com/rm4n0s/cave/internal/core/people"
 	"github.com/rm4n0s/cave/internal/core/sanitize"
@@ -121,6 +122,22 @@ type Conn struct {
 	noMoreSessions bool
 	// keepAlive asks the client whether it is still there; tests look at it.
 	keepAlive *keepAlive
+	// end is the first cause of the connection's end that Cave knows of; "" means the client.
+	end history.Reason
+	// opened are the activities it opened, each once, at most history.MaxActivities, and
+	// moreOpened counts the others: what the history keeps (docs/SPEC.md §9.11).
+	opened     []history.Activity
+	openedSeen map[history.Activity]bool
+	moreOpened int
+}
+
+// setEnd notes why Cave is about to close the connection, unless a cause was noted already.
+func (c *Conn) setEnd(reason history.Reason) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.end == "" {
+		c.end = reason
+	}
 }
 
 // ID returns the connection's id.
@@ -148,6 +165,15 @@ func (c *Conn) AddActivity(kind ActivityKind, detail string) (remove func()) {
 	n := c.nextActivity
 	c.nextActivity++
 	c.activities[n] = Activity{Kind: kind, Detail: sanitize.Display(detail, MaxActivityDetail)}
+	opened := history.Activity{Kind: string(kind), Detail: c.activities[n].Detail}
+	if !c.openedSeen[opened] {
+		c.openedSeen[opened] = true
+		if len(c.opened) < history.MaxActivities {
+			c.opened = append(c.opened, opened)
+		} else {
+			c.moreOpened++
+		}
+	}
 	c.mu.Unlock()
 	c.server.notify(ConnectionsChanged)
 	var once sync.Once
@@ -233,6 +259,7 @@ func (s *Server) Disconnect(id string) error {
 	if !ok {
 		return errors.New(TagConnectionNotFound, "there is no such connection", "id", id)
 	}
+	c.setEnd(history.ReasonDisconnected)
 	s.opts.Logger.Info("disconnecting", "connection", id, "person", c.info.PersonName)
 	_ = c.ssh.Close() // closing is the whole of it; a connection that is already gone is fine
 	return nil
@@ -240,11 +267,11 @@ func (s *Server) Disconnect(id string) error {
 
 // DisconnectAll closes every authenticated connection.
 func (s *Server) DisconnectAll() {
-	s.disconnectWhere(func(*Conn) bool { return true })
+	s.disconnectWhere(history.ReasonDisconnected, func(*Conn) bool { return true })
 }
 
-// disconnectWhere closes the connections that match.
-func (s *Server) disconnectWhere(match func(*Conn) bool) {
+// disconnectWhere closes the connections that match, for the reason the history gives.
+func (s *Server) disconnectWhere(reason history.Reason, match func(*Conn) bool) {
 	s.mu.Lock()
 	var closing []*Conn
 	for _, c := range s.connections {
@@ -254,6 +281,7 @@ func (s *Server) disconnectWhere(match func(*Conn) bool) {
 	}
 	s.mu.Unlock()
 	for _, c := range closing {
+		c.setEnd(reason)
 		s.opts.Logger.Info("disconnecting", "connection", c.info.ID, "person", c.info.PersonName)
 		_ = c.ssh.Close() // as in Disconnect
 	}
@@ -265,9 +293,9 @@ func (s *Server) disconnectWhere(match func(*Conn) bool) {
 func (s *Server) peopleChanged(change people.Change) {
 	switch change.Kind {
 	case people.PersonRenamed, people.PersonDisabled, people.PersonRemoved:
-		s.disconnectWhere(func(c *Conn) bool { return c.info.PersonID == change.PersonID })
+		s.disconnectWhere(history.ReasonPersonChanged, func(c *Conn) bool { return c.info.PersonID == change.PersonID })
 	case people.KeyRemoved:
-		s.disconnectWhere(func(c *Conn) bool {
+		s.disconnectWhere(history.ReasonPersonChanged, func(c *Conn) bool {
 			for _, id := range change.KeyIDs {
 				if c.info.KeyID == id {
 					return true
@@ -281,7 +309,7 @@ func (s *Server) peopleChanged(change people.Change) {
 // serveAuthenticated runs an authenticated connection until it ends: it puts it in the registry,
 // gives its channels and requests to their handlers, and takes it out when the client, the user
 // or the server ends it.
-func (s *Server) serveAuthenticated(sshConn *ssh.ServerConn, channels <-chan ssh.NewChannel, requests <-chan *ssh.Request, address string, arrived *atomic.Int64) {
+func (s *Server) serveAuthenticated(sshConn *ssh.ServerConn, channels <-chan ssh.NewChannel, requests <-chan *ssh.Request, address string, arrived, sent *atomic.Int64) {
 	perms := sshConn.Permissions.Extensions
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &Conn{
@@ -295,6 +323,7 @@ func (s *Server) serveAuthenticated(sshConn *ssh.ServerConn, channels <-chan ssh
 		ctx:        ctx,
 		cancel:     cancel,
 		activities: map[int]Activity{},
+		openedSeen: map[history.Activity]bool{},
 	}
 	s.mu.Lock()
 	s.connections[c.info.ID] = c
@@ -302,10 +331,15 @@ func (s *Server) serveAuthenticated(sshConn *ssh.ServerConn, channels <-chan ssh
 	s.mu.Unlock()
 	s.opts.Logger.Info("connected", "connection", c.info.ID, "person", c.info.PersonName, "address", address)
 	s.notify(ConnectionsChanged)
+	s.opts.History.Connected(history.Connection{
+		ID: c.info.ID, PersonID: c.info.PersonID, PersonName: c.info.PersonName, KeyFingerprint: c.info.KeyFingerprint,
+		Address: address, ClientVersion: c.info.ClientVersion, ConnectedAt: c.info.Since,
+	})
 
 	// The person may have been changed between the key's check and the registry: look again, so
 	// that no connection outlives a change that should have ended it.
 	if p, ok := s.opts.People.Get(c.info.PersonID); !ok || !p.Enabled || p.Name != c.info.PersonName || !hasKey(p, c.info.KeyID) {
+		c.setEnd(history.ReasonPersonChanged)
 		_ = sshConn.Close() // the loops below see the close
 	}
 
@@ -334,6 +368,13 @@ func (s *Server) serveAuthenticated(sshConn *ssh.ServerConn, channels <-chan ssh
 	s.mu.Unlock()
 	s.opts.Logger.Info("disconnected", "connection", c.info.ID, "person", c.info.PersonName, "address", address)
 	s.notify(ConnectionsChanged)
+	c.mu.Lock()
+	reason, opened, more := c.end, append([]history.Activity(nil), c.opened...), c.moreOpened
+	c.mu.Unlock()
+	if reason == "" {
+		reason = history.ReasonClient
+	}
+	s.opts.History.Ended(c.info.ID, s.opts.Clock.Now().UTC(), reason, arrived.Load(), sent.Load(), opened, more)
 }
 
 // hasKey says whether the person has the key.

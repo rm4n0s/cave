@@ -116,8 +116,8 @@ func (q *quietClient) waitQuestions(t *testing.T, n int64) {
 	}
 }
 
-// waitArrived waits until the server has counted bytes beyond before: the client's answer got
-// there.
+// waitArrived waits until the server has counted bytes beyond before, and then until nothing
+// more arrives for a while: the client's answer got there whole, not only its first bytes.
 func (k *keepAlive) waitArrived(t *testing.T, before int64) {
 	t.Helper()
 	deadline := time.Now().Add(waitFor)
@@ -126,6 +126,14 @@ func (k *keepAlive) waitArrived(t *testing.T, before int64) {
 			t.Fatal("nothing arrived from the client")
 		}
 		time.Sleep(time.Millisecond)
+	}
+	const settle = 50 * time.Millisecond
+	last, since := k.arrived.Load(), time.Now()
+	for time.Since(since) < settle {
+		time.Sleep(time.Millisecond)
+		if now := k.arrived.Load(); now != last {
+			last, since = now, time.Now()
+		}
 	}
 }
 
@@ -368,15 +376,16 @@ func TestTheEndOfTheConnectionEndsItsKeepAlive(t *testing.T) {
 func TestCountingConn(t *testing.T) {
 	here, there := net.Pipe()
 	defer func() { _ = here.Close() }()
-	var arrived atomic.Int64
-	counting := countingConn{Conn: here, arrived: &arrived}
+	var arrived, sent atomic.Int64
+	counting := countingConn{Conn: here, arrived: &arrived, sent: &sent}
 	go func() {
 		_, _ = there.Write([]byte("twelve bytes"))
+		_, _ = there.Read(make([]byte, 16))
 		_ = there.Close()
 	}()
 	buf := make([]byte, 5)
 	total := 0
-	for {
+	for total < 12 {
 		n, err := counting.Read(buf)
 		total += n
 		if err != nil {
@@ -385,5 +394,8 @@ func TestCountingConn(t *testing.T) {
 	}
 	if total != 12 || arrived.Load() != 12 {
 		t.Errorf("read %d bytes, counted %d", total, arrived.Load())
+	}
+	if n, err := counting.Write([]byte("seven b")); err != nil || n != 7 || sent.Load() != 7 {
+		t.Errorf("wrote %d bytes (%v), counted %d", n, err, sent.Load())
 	}
 }

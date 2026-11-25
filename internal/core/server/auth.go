@@ -137,8 +137,9 @@ func (s *Server) serve(conn net.Conn) {
 	})
 	t := &tracker{}
 	// What arrives is counted, for the keepalive of docs/SPEC.md §9.9.
-	arrived := &atomic.Int64{}
-	sshConn, channels, requests, err := ssh.NewServerConn(countingConn{Conn: conn, arrived: arrived}, s.config(t))
+	// What is sent is counted too, for the history of docs/SPEC.md §9.11.
+	arrived, sent := &atomic.Int64{}, &atomic.Int64{}
+	sshConn, channels, requests, err := ssh.NewServerConn(countingConn{Conn: conn, arrived: arrived, sent: sent}, s.config(t))
 	grace.Stop()
 	s.settled(address)
 	if err != nil {
@@ -152,5 +153,5 @@ func (s *Server) serve(conn net.Conn) {
 		Outcome: attempts.Accepted, PersonID: perms[extPersonID], PersonName: perms[extPersonName], LoginName: sshConn.User(),
 		Address: address, ClientVersion: string(sshConn.ClientVersion()), Keys: []string{perms[extKeyFingerprint]},
 	})
-	s.serveAuthenticated(sshConn, channels, requests, address, arrived)
+	s.serveAuthenticated(sshConn, channels, requests, address, arrived, sent)
 }

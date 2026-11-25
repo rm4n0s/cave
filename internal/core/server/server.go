@@ -15,6 +15,7 @@ import (
 
 	"github.com/rm4n0s/cave/internal/core/attempts"
 	"github.com/rm4n0s/cave/internal/core/clock"
+	"github.com/rm4n0s/cave/internal/core/history"
 	"github.com/rm4n0s/cave/internal/core/people"
 	"github.com/rm4n0s/cave/internal/core/settings"
 	"github.com/rm4n0s/errors"
@@ -93,6 +94,8 @@ type Options struct {
 	People *people.Store
 	// Attempts gets one record for every connection.
 	Attempts *attempts.List
+	// History gets the record of every authenticated connection (docs/SPEC.md §9.11).
+	History *history.Store
 	// HostKey is the key the server proves itself with; SetHostKey replaces it.
 	HostKey ssh.Signer
 	// Settings has the address, the port and what clients may do.
@@ -247,6 +250,9 @@ func (s *Server) Stop(ctx context.Context) error {
 	s.state = Stopping
 	listener := s.listener
 	s.listener = nil
+	for _, c := range s.connections {
+		c.setEnd(history.ReasonServerStopped)
+	}
 	open := make([]net.Conn, 0, len(s.conns))
 	for conn := range s.conns {
 		open = append(open, conn)
