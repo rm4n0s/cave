@@ -9,6 +9,7 @@ Everything here is true of both programs, `cave` (the desktop application) and `
 - [People and keys](#people-and-keys)
 - [The attempts list](#the-attempts-list)
 - [Connections](#connections)
+- [History](#history)
 - [What a connected person can do](#what-a-connected-person-can-do)
 - [Settings](#settings)
 - [Files and folders](#files-and-folders)
@@ -73,6 +74,27 @@ The Connections page lists the people who are connected now: who, with which key
 
 Cave also disconnects a client that has gone silent: it asks every `server.keepAliveSeconds` seconds whether the client is still there, and closes the connection after three silent checks more. Set it to 0 to turn this off.
 
+## History
+
+The History page remembers who was connected and which files they moved, also after Cave is closed. It has two tabs (in `tcave`, `t` switches between them, `/` searches, `Enter` shows the details and `C` clears).
+
+**Connections** lists every connection that logged in, the newest first: who, from which address, when, for how long, and how it ended:
+
+| Ended | Meaning |
+|---|---|
+| Client left | The person closed their connection, or their network did. |
+| Disconnected by you | You pressed Disconnect or Disconnect all. |
+| Person or key changed | You renamed, disabled or removed the person, or removed the key they used. |
+| Stopped answering | The client went silent (see `server.keepAliveSeconds`). |
+| Server stopped | You stopped the server, or closed Cave. |
+| Unknown: Cave did not close | Cave ended without writing it down: it was killed, or the computer stopped. There is no duration. |
+
+A connection that is still open says *Connected now*. Select one to see the rest: the key, the client, how much data went each way, what it opened (a shell, commands, file transfer, forwards), and the files it moved. Refused attempts are not here; they are on the Attempts page.
+
+**Transfers** lists every file that a person uploaded or downloaded with `sftp`, `scp` or `sshfs` (or an editor that works over SFTP): who, the file, *Upload*, *Download* or *Both*, its size, when, and whether it was *Done*, *Failed*, or *Interrupted* (the connection ended while the file was open). A file that a program reads in parts, as `sshfs` and editors do, is a line each time it is opened. What runs as a command is not a transfer: `rsync`, `scp -O` and `git` show up as the command of the connection. The history keeps the names of files, never what is in them.
+
+The history is the file `history.jsonl` in the state folder, one line for each event. When it passes 4 MiB it becomes `history.jsonl.1`, replacing the old one, so the history takes at most about 8 MiB and the oldest records go first. The page shows the newest 2 000 connections and 5 000 transfers. "Clear history" empties it (the connections that are open stay), and the setting `history.clear` can do it for you, with the same choices as `attempts.clear`.
+
 ## What a connected person can do
 
 Be clear about this before you add anybody: **a person who is connected is you on this computer.** Their shell runs as the operating system user who started Cave. They can:
@@ -121,7 +143,7 @@ Settings can also be changed by editing `settings.json` while Cave is closed. A 
 | Configuration | `$XDG_CONFIG_HOME/cave`, else `~/.config/cave` | `~/Library/Application Support/Cave` | `%AppData%\Cave` |
 | State | `$XDG_STATE_HOME/cave`, else `~/.local/state/cave` | `~/Library/Application Support/Cave/State` | `%LocalAppData%\Cave` |
 
-The configuration folder holds `settings.json`, `people.json` (the people and their keys), and the host key, `ssh_host_ed25519_key` and its `.pub`. The state folder holds `attempts.json` (the attempts list), `cave.log` and `cave.log.1` (the log), and `lock`.
+The configuration folder holds `settings.json`, `people.json` (the people and their keys), and the host key, `ssh_host_ed25519_key` and its `.pub`. The state folder holds `attempts.json` (the attempts list), `history.jsonl` and `history.jsonl.1` (the history), `cave.log` and `cave.log.1` (the log), and `lock`.
 
 The folders are created readable by you only, and so are the files with the people and the host key. Back up the configuration folder to keep your people and your host key. If you copy it to another computer, people will not see a warning about the host key.
 

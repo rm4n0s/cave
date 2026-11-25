@@ -668,3 +668,14 @@ Every step of `docs/IMPLEMENTATION.md` is implemented (M0 to M9). The milestones
 - **Proof**: ![10.6-history](implemented-proof-images/10.6-history.png) — two real connections of alice (`ssh`, `sftp`) with their duration and `Client left`; `scripts/proof.sh docs/implemented-proof-images/10.6-history.png --config <a copy of scripts/testdata/two-people with server.startOnLaunch on and the light theme> --during '<proof-ssh.sh and proof-sftp.sh as in step 10.5>' --after 6 -- --page history`
 - **Manual checks**: none
 - **Glutter issues**: none
+
+## Step 10.7: The manual for the history
+- **Date**: 2026-11-25
+- **Branch**: feat/step-10.7-manual-history
+- **Summary**: The guide has a section "History" (the two tabs and their keys in `tcave`, the reasons in words, what is a transfer and what is not, the file, its limit and its rotation, "Clear history" and `history.clear`) and names the history files in the state folder; the README says that Cave shows who was connected, for how long, and the files they moved; `docs/SECURITY.md` says what the history holds and what it never holds, and its table has the rule of the history with its tests. Last step of M10: `devVersion` becomes `0.12.0-dev`, and M10 is published as `v0.11.0`.
+- **Decisions**: none
+- **Checks**: `scripts/checks.sh` passed: gofmt, vet (Linux, macOS, Windows), golangci-lint 0 issues, race tests as a debug build, cgo-free build and tests, Windows build, error tags (none untested), the Wine run.
+- **Tests**: `TestTheGuideNamesEverySetting` (the guide names `history.clear`) and the usage goldens, as before.
+- **Proof**: none
+- **Manual checks**: none
+- **Glutter issues**: none

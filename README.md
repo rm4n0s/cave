@@ -1,6 +1,6 @@
 # Cave
 
-Cave is an SSH server that you start, watch and stop yourself. It does the job of `sshd`, but it is an ordinary program: it needs no root, and every person who connects gets a session that runs as **you**. You open it, add the people you trust and the public keys they connect with, and see who tried to connect and how many times. When you are done, you close it.
+Cave is an SSH server that you start, watch and stop yourself. It does the job of `sshd`, but it is an ordinary program: it needs no root, and every person who connects gets a session that runs as **you**. You open it, add the people you trust and the public keys they connect with, and see who tried to connect and how many times, who was connected and for how long, and which files they uploaded and downloaded. When you are done, you close it.
 
 It is for people who want to give a friend, a colleague or their own other computer a shell or a file transfer for a while, without setting up a system service. It runs on Linux, on macOS 14 or newer, and on Windows 10 (version 1809) or newer.
 
