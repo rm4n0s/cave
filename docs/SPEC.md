@@ -6,6 +6,7 @@ Cave does the job of `sshd` as an application that an ordinary user starts, watc
 
 - A person who wants to let somebody into their computer over SSH starts Cave, adds that **person** with one or more **public keys**, and tells them `ssh -p 2222 <name>@<address>`.
 - Cave shows **who tried to connect and how many times** (the attempts list), who is connected now, and lets the user disconnect them.
+- Cave keeps a **history** in a file: who was connected, when, for how long and how it ended, and which files they uploaded and downloaded (§9.11).
 - Cave needs no root, no system service and no `sshd_config`. When Cave is not running, nobody can connect.
 - Standard clients work: OpenSSH's `ssh`, `scp`, `sftp`, `rsync` and `git` over SSH, `sshfs`, PuTTY, and editors' remote modes that only need a shell, `exec` and SFTP.
 
@@ -25,6 +26,8 @@ Cave does the job of `sshd` as an application that an ordinary user starts, watc
 | D10 | Public key authentication only | §7 |
 | D11 | The attempts list is cleared when the setting `attempts.clear` says, or by hand | the user, 2026-11-24 ("put in settings when the list gets cleared") |
 | D12 | SFTP is written in Cave (protocol version 3); no dependency for it | follows "prefer the standard library" |
+| D13 | A history of connections (with their duration) and of the files moved over SFTP, kept in a file: `history.jsonl`, lines appended, replaced by `history.jsonl.1` when it grows past its limit; "Clear history" and the setting `history.clear` empty it; a transfer is the content of a file uploaded or downloaded (not renames, removals or new folders) | the user, 2026-11-25 ("show a history of connections/disconnections and duration", "show the files that upload/download and its history. The history be in a file"; the choices proposed to the user were taken: "work on the other steps") |
+| D14 | No mosh server | the user, 2026-11-25 ("leave mosh out") |
 
 ## 3. Platforms and requirements
 
@@ -56,6 +59,7 @@ cmd/tcave ► internal/tui ┘
 | `internal/core/settings` | The settings: schema, defaults, validation, file (§6) |
 | `internal/core/people` | People and their public keys: parsing, validation, the store, the lookup that authentication uses (§7) |
 | `internal/core/attempts` | The attempts list: recording, counting, limits, clearing, file (§8) |
+| `internal/core/history` | The history of connections and transfers: records, the file, its limits, clearing (§9.11) |
 | `internal/core/hostkey` | The host key: create, load, fingerprint (§9.10) |
 | `internal/core/server` | The listener, the handshake and its limits, authentication, the registry of connections, the dispatch of channels and global requests, keepalive (§9.1–9.3, 9.9) |
 | `internal/core/session` | Session channels: `pty-req`, `env`, `shell`, `exec`, `subsystem`, `window-change`, `signal`; the environment; the process (§9.4, 9.5) |
@@ -107,9 +111,10 @@ The server accepts each connection on its own goroutine; sessions, SFTP and forw
 | `ssh_host_ed25519_key`, `ssh_host_ed25519_key.pub` | configuration | §9.10 |
 | `attempts.json` | state | §8 |
 | `cave.log`, `cave.log.1` | state | §15 |
+| `history.jsonl`, `history.jsonl.1` | state | §9.11 |
 | `lock` | state | §5.4 |
 
-Every JSON file is an object with `"version": 1`. A file with a higher version is refused (`…VersionUnsupported`) and never overwritten. A file that does not parse is refused (`…ParseFailed`) and never overwritten: the app shows the error and the path and offers to quit; it does not start with empty data over a broken `people.json`. A missing file means defaults (no people, default settings, an empty list).
+Every JSON file but the history is an object with `"version": 1` (the history is JSON lines, §9.11). A file with a higher version is refused (`…VersionUnsupported`) and never overwritten. A file that does not parse is refused (`…ParseFailed`) and never overwritten: the app shows the error and the path and offers to quit; it does not start with empty data over a broken `people.json`. A missing file means defaults (no people, default settings, an empty list).
 
 ### 5.3 Writing
 
@@ -130,6 +135,7 @@ Files are written atomically: a temporary file in the same folder with mode `060
 | `server.startOnLaunch` | boolean | `false` | Start the server when Cave starts. Off: the user starts the server (Start on the Overview page, the tray, or `s` in the TUI) once the people and their keys are in (the user, 2026-11-25) |
 | `server.keepAliveSeconds` | integer 0–3600 | `60` | Look this often whether anything arrived from a client, and ask a silent one whether it is there; after 3 more silent looks, disconnect (§9.9). `0` turns it off |
 | `attempts.clear` | `never`, `onStart`, `hourly`, `daily`, `weekly`, `monthly` | `never` | When the attempts list is cleared (§8.4) |
+| `history.clear` | `never`, `onStart`, `hourly`, `daily`, `weekly`, `monthly` | `never` | When the history is cleared (§9.11) |
 | `session.shell` | string | `""` | The shell of sessions; empty means the user's own (§9.5, §13.2) |
 | `session.acceptEnv` | list of strings | `["LANG","LC_*"]` | Names of environment variables a client may set; `*` matches any run of characters |
 | `sftp.enabled` | boolean | `true` | The SFTP subsystem |
@@ -268,7 +274,7 @@ The list holds **entries**; an attempt adds 1 to the count of the entry with the
 
 ### 9.3 Connections
 
-An authenticated connection is listed in the **registry** until it ends: id (`c_` and 16 hexadecimal digits), person, key fingerprint, address, client version, since when, and what it has open: sessions (`shell`, `exec` with the command sanitized to 80 characters, `sftp`), local forwards in use, remote forwards (listening address and port), agent forwarding. `Disconnect(id)` closes one. At most 256 channels are open at once per connection; one more is refused (`resource shortage`).
+An authenticated connection is listed in the **registry** until it ends: id (`c_` and 16 hexadecimal digits), person, key fingerprint, address, client version, since when, and what it has open: sessions (`shell`, `exec` with the command sanitized to 80 characters, `sftp`), local forwards in use, remote forwards (listening address and port), agent forwarding. `Disconnect(id)` closes one. When a connection ends, the history gets its record (§9.11). At most 256 channels are open at once per connection; one more is refused (`resource shortage`).
 
 Channel types: `session` (§9.4), `direct-tcpip` (§9.8). Global requests: `tcpip-forward`, `cancel-tcpip-forward` (§9.8), `keepalive@openssh.com` and `no-more-sessions@openssh.com` (answered or obeyed). Everything else is refused.
 
@@ -354,6 +360,7 @@ Version 3 of the protocol (draft-ietf-secsh-filexfer-02), as OpenSSH's `sftp-ser
 - Every request is a line of the log at the debug level, with its path made safe (§8.3).
 - `subsystem` is the channel's one start, like `shell` and `exec`; a PTY asked before it is not used. With `sftp.enabled` off the request is refused, and a channel refused this way may still start something else.
 - OpenSSH's `scp` uses SFTP (since 9.0) and so works without a helper; `scp -O` runs `scp` through `exec`, which works when `scp` is installed.
+- Every file the client reads from or writes to is a transfer in the history (§9.11).
 
 ### 9.8 Forwarding
 
@@ -390,24 +397,85 @@ Every `server.keepAliveSeconds`, Cave looks at what arrived from each connection
 - "New host key" replaces it (the UIs warn that every client will see a changed-host-key warning). It takes effect for new connections.
 - A host key file that cannot be read (the errors of `storage`), is not a private key (`HostKeyParseFailed`) or is a key of another type (`HostKeyTypeUnsupported`) is an error; Cave never silently replaces it. The `.pub` file is derived: when it is missing or differs, it is written again.
 
+### 9.11 History
+
+Cave keeps a history of the connections that were authenticated and of the files moved over SFTP (D13). Attempts that were refused stay in the attempts list (§8) and are not in the history.
+
+**Connections.** The record of a connection has:
+
+| Field | Content |
+|---|---|
+| `id` | The connection's id (§9.3) |
+| `personId`, `personName` | The person; the name is copied, so the record still reads after the person is removed |
+| `keyFingerprint`, `address`, `clientVersion` | As in the registry (§9.3) |
+| `connectedAt` | When it was authenticated |
+| `endedAt` | When it ended; empty while it is open and for `unknown` |
+| `reason` | How it ended (below); empty while it is open |
+| `bytesIn`, `bytesOut` | The bytes of the TCP connection that arrived from the client and were sent to it, from the accept to the end |
+| `activities` | What it opened, in the order of first use (§9.3: kind and detail), each (kind, detail) once, at most 32; `moreActivities` counts the others |
+
+The duration is `endedAt` minus `connectedAt`. The reasons:
+
+| Reason | Meaning |
+|---|---|
+| `client` | The client ended it, or the network did |
+| `disconnected` | The user disconnected it (Disconnect, Disconnect all) |
+| `personChanged` | The person was renamed, disabled or removed, or the key it used was removed (§7.1) |
+| `keepalive` | The client stopped answering (§9.9) |
+| `serverStopped` | The server stopped, or Cave closed |
+| `unknown` | Cave ended without writing the end (it was killed, or the computer stopped) |
+
+The reason is the first cause that happened: a connection the user disconnects is `disconnected`, not `client`, although the client then sees its connection close.
+
+**Transfers.** A transfer is one file that an SFTP session opened and then read from or wrote to (at least one byte), or opened with the flag to create it or to empty it (an empty file uploaded). A file opened and closed without either is not a transfer. The record has:
+
+| Field | Content |
+|---|---|
+| `id` | `t_` and 16 hexadecimal digits |
+| `connectionId`, `personId`, `personName` | Whose session it was |
+| `path` | The path the client opened, made absolute against the home folder the way `REALPATH` does it, cleaned with `sanitize.Display` to at most 256 characters |
+| `openedAt`, `closedAt` | When it was opened and closed |
+| `downloaded`, `uploaded` | The bytes the client read and wrote |
+| `result` | `done` (the client closed it), `failed` (a read that was not at the end of the file, or a write, failed; the file was closed afterwards) or `interrupted` (the session or the connection ended while it was open) |
+
+The UIs call a transfer an **upload** when only `uploaded` is not 0 or the file was created or emptied without reading, a **download** when only `downloaded` is not 0, and **both** otherwise. A file read in parts (an editor, `sshfs`) is a transfer for each time it is opened. What runs through `exec` (`scp -O`, `rsync`, `git`) is not a transfer: it is the `exec` activity of the connection. The history holds the names of files, never their content.
+
+**The file.** `history.jsonl` in the state folder: JSON lines, one object per line with `"v":1` and a `kind`:
+
+| Kind | Written | Fields |
+|---|---|---|
+| `connected` | When a connection is authenticated | `id`, `personId`, `personName`, `keyFingerprint`, `address`, `clientVersion`, `connectedAt` |
+| `ended` | When it ends | `id`, `endedAt`, `reason`, `bytesIn`, `bytesOut`, `activities`, `moreActivities` |
+| `transfer` | When the file is closed, or its session ends | every field of a transfer |
+| `state` | As the first line of every new file, and when the clearing's times change | `lastClearedAt`, `nextClearAt` (empty when there are none) |
+
+- Lines are appended to a file of mode `0600`, as they happen; they are not written atomically or synced one by one, so a crash may lose the last lines or leave half a line.
+- When a line would take the file past 4 MiB, the file is renamed `history.jsonl.1` (replacing the one before), and a new file starts with a `state` line. So the history takes at most about 8 MiB, and the oldest records go first.
+- At start, `history.jsonl.1` and then `history.jsonl` are read. A line that does not parse, is longer than 64 KiB, has another `v`, an unknown kind or no id, is skipped; the number of skipped lines is logged as a warning. An `ended` line without its `connected` line is skipped. A connection with a `connected` line and no `ended` line has the reason `unknown`. A file that cannot be read (but exists) is an error (`HistoryReadFailed`) and Cave does not open, as with the other files.
+- Kept in memory and shown: the newest 2 000 connections (by `connectedAt`) and the newest 5 000 transfers (by `closedAt`); the UIs list them newest first.
+- A line that cannot be written is logged (`HistoryWriteFailed`) and the record stays in memory; the next line tries again, opening the file again.
+- Every write changes the topic `History` (§10).
+
+**Clearing.** "Clear history" (asks first) removes both files and starts a new one with a `state` line; the connections that are open stay in the history, and their `connected` lines are written again into the new file, so that their end has its start. `history.clear` empties it the way `attempts.clear` empties the attempts list (§8.4: `onStart` before the server starts, a period checked at start and once a minute), with its times in the `state` line. The UIs show when the history was last cleared and, for a period, when it will be next.
+
 ## 10. The application layer (`internal/app`)
 
 `app.Open(ctx, Options) (*App, error)` takes the lock, opens the log, loads settings, people, attempts and the host key, applies `attempts.clear` (`onStart`, or an overdue period), and starts the server when `server.startOnLaunch` (and not `--no-start`). `(*App).Close(ctx)` stops the server, saves, releases the lock.
 
-- **Snapshots** (plain values, safe to keep): `Server()` (state, listening addresses, error, host key fingerprint, the addresses of this computer with a ready `ssh -p <port> <name>@<address>` line), `People()`, `Attempts()` (entries, last cleared, next clear), `Connections()`, `Settings()`.
-- **Commands**: `StartServer`, `StopServer`; `AddPerson` (name and keys text), `CheckPersonName` (changes nothing), `RenamePerson`, `SetPersonEnabled`, `RemovePerson`, `AddKeys` (text), `ImportKeys` (file), `SetKeyComment`, `RemoveKey`; `ClearAttempts`, `RemoveAttempt`; `Disconnect`, `DisconnectAll`; `Set` (one setting); `NewHostKey`. Each returns an `error` with a Tag the UIs turn into a sentence (`DisconnectAll` cannot fail and returns nothing).
-- **Events**: `Subscribe(func(Event)) (cancel func())`. `Changed{Topics}` (a set of `Server`, `People`, `Attempts`, `Connections`, `Settings`), coalesced to at most one every 100 ms; `Accepted{person, address}` and `Rejected{entry}` for notifications. These two are made from the attempts that are recorded and handed to the subscribers by a goroutine of their own, through a queue of 64: a subscriber that is slow loses the newest events and never holds up a connection. `Rejected` is sent at most once a minute (by the application's clock). Nothing is sent after `Close`.
+- **Snapshots** (plain values, safe to keep): `Server()` (state, listening addresses, error, host key fingerprint, the addresses of this computer with a ready `ssh -p <port> <name>@<address>` line), `People()`, `Attempts()` (entries, last cleared, next clear), `Connections()`, `History()` (connections, transfers, last cleared, next clear), `Settings()`.
+- **Commands**: `StartServer`, `StopServer`; `AddPerson` (name and keys text), `CheckPersonName` (changes nothing), `RenamePerson`, `SetPersonEnabled`, `RemovePerson`, `AddKeys` (text), `ImportKeys` (file), `SetKeyComment`, `RemoveKey`; `ClearAttempts`, `RemoveAttempt`; `ClearHistory`; `Disconnect`, `DisconnectAll`; `Set` (one setting); `NewHostKey`. Each returns an `error` with a Tag the UIs turn into a sentence (`DisconnectAll` cannot fail and returns nothing).
+- **Events**: `Subscribe(func(Event)) (cancel func())`. `Changed{Topics}` (a set of `Server`, `People`, `Attempts`, `Connections`, `History`, `Settings`), coalesced to at most one every 100 ms; `Accepted{person, address}` and `Rejected{entry}` for notifications. These two are made from the attempts that are recorded and handed to the subscribers by a goroutine of their own, through a queue of 64: a subscriber that is slow loses the newest events and never holds up a connection. `Rejected` is sent at most once a minute (by the application's clock). Nothing is sent after `Close`.
 - `app.Message(err)` turns an error into the sentence shown to the user (one table of sentences by Tag for both UIs, filled in from the error's metadata, every value made safe with `sanitize.Display`); an unknown Tag shows the error's own message.
-- **Words** both UIs show are written once here: the wording of an attempt's result (§11.3), relative times ("3 min ago", "in 4 d"), what a connection has open, the question before quitting (§11.6), and each setting's group, label and one-line explanation (§11.5).
+- **Words** both UIs show are written once here: the wording of an attempt's result (§11.3), relative times ("3 min ago", "in 4 d"), durations ("2 h 5 min"), sizes ("1.4 MB"), what a connection has open, the words of the history (§11.8), the question before quitting (§11.6), and each setting's group, label and one-line explanation (§11.5).
 - **Opening.** Root is refused before anything is touched (§9.1). A failure after that (the lock is held: `AlreadyRunning`; a file that does not parse; a folder that cannot be made) is returned with everything released: no lock, no listener. A server that cannot start is not such a failure: the application opens with the server stopped and the reason in the `Server()` snapshot, so that the user can choose another port.
 - **`Server()`**: `Err` is why the server is not running although it was asked to (a failed start, or a failed move of the listener), and is cleared by a start that works and by `StopServer`. `Port` is the listener's port, or the one it would use. `Addresses` is the one address of `server.address` when that is set, else this computer's addresses (`netinfo`: those of the interfaces that are up, IPv4 before IPv6, loopback last, link-local IPv6 left out). `Command(person, address)` is the line to give a person; the port 22 is not written.
 - **`Set`** saves the setting and does what the change asks for at once. When the effect fails (a port that cannot be listened on), the setting stays saved, the failure is returned and `Server()` keeps it.
 - **`Changed`** is sent 100 ms after the first change the subscribers have not been told of, with every topic that changed meanwhile; nothing is sent after `Close`.
-- **Flags** (`app.Flags`, the same for both programs): `--config-dir`, `--state-dir`, `--port`, `--no-start`, `--allow-root`, `--log-level`, `--version`, `--page <name>` (the page shown first: `overview`, `people`, `attempts`, `connections` or `settings`; another name is `FlagsPageInvalid`), and `--help`, which prints them.
+- **Flags** (`app.Flags`, the same for both programs): `--config-dir`, `--state-dir`, `--port`, `--no-start`, `--allow-root`, `--log-level`, `--version`, `--page <name>` (the page shown first: `overview`, `people`, `attempts`, `connections`, `history` or `settings`; another name is `FlagsPageInvalid`), and `--help`, which prints them.
 
 ## 11. The desktop app (`cave`)
 
-Material 3, light and dark (`ui.theme`), one window (960×640 at first, at least 720×480) titled "Cave". A navigation rail with five pages; below 800 logical pixels wide it becomes a bottom bar.
+Material 3, light and dark (`ui.theme`), one window (960×640 at first, at least 720×480) titled "Cave". A navigation rail with six pages (Overview, People, Attempts, Connections, History, Settings); below 800 logical pixels wide it becomes a bottom bar.
 
 ### 11.1 Overview
 The server's state with one big Start/Stop button; the listening port; the host key fingerprint (copy button); "How to connect": for each address of this computer, the line `ssh -p <port> <name>@<address>` (copy button); counts: people, connected now, attempts in the list. When the server could not start, the error and what to do. When there are no people, a hint with a button to the People page.
@@ -422,22 +490,27 @@ A table: Who, Login name, Address, Result, Count, First, Last. A filter (All, Ac
 Who is connected now: person, address, since, what is open (§9.3). "Disconnect" (asks first), "Disconnect all".
 
 ### 11.5 Settings
-Every setting of §6 in groups (Server, Attempts list, Sessions, File transfer and forwarding, Notifications, Appearance), each with a one-line explanation; the host key with "New host key…"; the paths of the configuration and state folders; the version.
+Every setting of §6 in groups (Server, Attempts and history, Sessions, File transfer and forwarding, Notifications, Appearance), each with a one-line explanation; the host key with "New host key…"; the paths of the configuration and state folders; the version.
 
 ### 11.6 Tray, notifications, closing
 - A tray icon when the desktop has a tray: it shows whether the server runs, and its menu has Show, Start/Stop server and Quit.
 - Notifications as `notify.*` say.
 - The close button: with `ui.closeToTray` and a tray, the window hides. Otherwise Cave quits, after asking when people are connected ("3 people are connected. Quit and disconnect them?"). The end of the desktop session quits without asking.
 
+### 11.8 History
+Two tabs: **Connections** and **Transfers**, and a search field (who, address, file). Connections: a table of Who, Address, Connected (when), Duration ("Connected now" while it is open, "—" for `unknown`), Ended (the reason in words: "Client left", "Disconnected by you", "Person or key changed", "Stopped answering", "Server stopped", "Unknown: Cave did not close"); selecting a row shows the rest (key fingerprint, client version, data in and out, what it opened) and the connection's transfers. Transfers: a table of Who, File, Direction (Upload, Download, Both), Size (the bytes of the direction; both for Both), When (closed), Result ("Done", "Failed", "Interrupted"); selecting a row shows the rest (connection, opened, closed, duration, full path). "Clear history" (asks first). A line says when the history was last cleared and when it will be next, with a link to the setting.
+
 ## 12. The TUI (`tcave`)
 
-The same five pages, in the alternate screen, with the mouse off (so the terminal's own selection and copy work).
+The same six pages, in the alternate screen, with the mouse off (so the terminal's own selection and copy work).
 
 - A header: "Cave", the server's state and port, connected-now and attempts counts. A footer: the keys of the current page.
-- `1`–`5` or `Tab`/`Shift+Tab` change page; `s` starts or stops the server; `?` shows every key; `q` or `Ctrl+C` quits (asking when people are connected). Lists move with the arrows, `j`/`k`, `PgUp`/`PgDn`, `Home`/`End`.
+- The second line names the pages; when the names do not fit the width, the pages that are not current show only their number.
+- `1`–`6` or `Tab`/`Shift+Tab` change page; `s` starts or stops the server; `?` shows every key; `q` or `Ctrl+C` quits (asking when people are connected). Lists move with the arrows, `j`/`k`, `PgUp`/`PgDn`, `Home`/`End`.
 - People: `a` add (asks the name, which is checked, then the keys in a multi-line field, ctrl+d to add; nobody is added without a key), `Enter` open, `e` rename, `Space` enable/disable, `d` remove (asks); inside a person: `a` add keys (a multi-line field; paste works through bracketed paste), `i` import from a file (a path field), `c` edit comment, `d` remove key, `Esc` back.
 - Attempts: `f` cycles the filter, `/` searches, `Enter` shows details, `d` removes, `C` clears (asks).
 - Connections: `d` disconnect (asks), `D` disconnect all (asks).
+- History: `t` switches between Connections and Transfers, `/` searches, `Enter` shows details, `C` clears (asks).
 - Settings: `Enter` or `Space` changes (a switch flips, a choice cycles, a number or text opens a field); `Esc` cancels an edit.
 - Works from 60×16 cells; smaller shows "Terminal too small". Honors `NO_COLOR`. Columns are cut with `…`, never wrapped.
 - While the TUI runs, nothing is written to the terminal but the TUI; logs go to the file.
@@ -499,7 +572,7 @@ No test, proof or check touches the user's Cave folders, `~/.ssh`, SSH agent, `~
 
 ## 17. Not in this version
 
-Named so that nobody adds them by accident; each needs a spec change first: password or any other authentication method; several OS users or changing user; per-person permissions (shell, files, forwarding); certificates and `authorized_keys` options; X11 forwarding; blocking addresses after failures; attaching a second UI to a running instance; running as a system service; an app bundle or notarization for macOS; translations.
+Named so that nobody adds them by accident; each needs a spec change first: password or any other authentication method; several OS users or changing user; per-person permissions (shell, files, forwarding); certificates and `authorized_keys` options; X11 forwarding; blocking addresses after failures; mosh (D14); a history of what is typed or shown in sessions; attaching a second UI to a running instance; running as a system service; an app bundle or notarization for macOS; translations.
 
 ## 18. Milestones
 
@@ -515,3 +588,4 @@ Named so that nobody adds them by accident; each needs a spec change first: pass
 | M7 | Windows | Everything on Windows, tested under Wine |
 | M8 | Release | Manual, packaging, the security pass |
 | M9 | macOS | Everything on macOS: storage, PTY, sessions, SFTP, agent forwarding, both programs, the scripts and a release archive |
+| M10 | History | The history of connections and transfers (§9.11), in the core, the application and both UIs |

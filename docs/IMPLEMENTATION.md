@@ -1560,3 +1560,192 @@ The user, 2026-11-25: "make it work for macos". Everything of Cave on macOS 14 o
 4. **Last step of M9**: a second commit sets `devVersion` to `0.11.0-dev`; then merge, tag `step-9.3`, publish as `v0.10.0` (rule 14).
 
 **Finish**: rules 10–15. No proof.
+
+---
+
+## M10: History
+
+The user, 2026-11-25: "show a history of connections/disconnections and duration", "show the files that upload/download and its history. The history be in a file", and "leave mosh out" (SPEC D13, D14). The history of connections and SFTP transfers (SPEC §9.11), in the core, the application and both UIs. Published as `v0.11.0`.
+
+**Read this before any step of M10.**
+
+- SPEC §9.11 is the whole of the feature; read it before every step of M10. The UIs are SPEC §11.8 and §12.
+- Records are written on the goroutines of connections and SFTP sessions: the store is safe for concurrent use, writes one line under its lock, and never calls a listener while holding it (look at how `internal/core/attempts` notifies).
+- Everything in a record that came from a client (the client version, a path, the detail of an activity) is cleaned with `sanitize.Display` before it is stored, by the store itself, so that no caller can forget.
+- Tests make the store with `storagetest.Isolate(t)` folders and the fake clock; they never use `time.Now`.
+
+### Step 10.1: The history store
+
+**Goal**: `internal/core/history` keeps the records of SPEC §9.11 in memory and in `history.jsonl`, with its limits, its rotation, its reading at start and its clearing. Nothing calls it yet.
+
+**Read**: SPEC §9.11, §5, §8.4, §8.5. `internal/core/attempts/attempts.go` (options, `Policy`, `ApplyPolicy`, `PolicyChanged`, `Subscribe`, how it notifies) and `internal/core/logging/logging.go` (`rotatingFile`: append, size, rotate).
+
+**Files**: `internal/core/history/history.go`, `file.go`, `history_test.go`, `file_test.go`; `internal/core/storage` only if a helper for mode `0600` appends is missing (look first).
+
+**Tasks**
+
+1. Types:
+   - `Reason` (string) with `ReasonClient`, `ReasonDisconnected`, `ReasonPersonChanged`, `ReasonKeepAlive`, `ReasonServerStopped`, `ReasonUnknown` (the words of §9.11).
+   - `Result` (string) with `ResultDone`, `ResultFailed`, `ResultInterrupted`.
+   - `Activity{Kind, Detail string}` (the store does not import `server`, which will import it).
+   - `Connection{ID, PersonID, PersonName, KeyFingerprint, Address, ClientVersion string; ConnectedAt, EndedAt time.Time; Reason Reason; BytesIn, BytesOut int64; Activities []Activity; MoreActivities int}` with `Open() bool` (no reason yet) and `Duration() (time.Duration, bool)` (false while open and for `unknown`).
+   - `Transfer{ID, ConnectionID, PersonID, PersonName, Path string; OpenedAt, ClosedAt time.Time; Downloaded, Uploaded int64; Created bool; Result Result}` with `Direction() Direction` (`Upload`, `Download`, `Both`, by the rule of §9.11; `Created` is "opened to create or to empty").
+2. `Open(ctx, Options{Dirs, Clock, Logger}) (*Store, error)`: reads `history.jsonl.1` then `history.jsonl` (§9.11 "At start"), line by line with a `bufio.Reader` that skips lines over 64 KiB without holding them; keeps the newest 2 000 connections and 5 000 transfers; logs `history lines skipped` with the count when there were any. An existing file that cannot be read is `HistoryReadFailed` (path in the metadata).
+3. Writing: `Connected(Connection)`, `Ended(id string, endedAt time.Time, reason Reason, bytesIn, bytesOut int64, activities []Activity, more int)`, `AddTransfer(Transfer)` (gives the id `t_…` with `ids.New`). Each cleans the client's texts (client version 64, path 256, activity detail 80 characters), updates memory, appends its line (§9.11 "The file"), and notifies. `Ended` of an id that is not there (it was cleared, or rotated away) writes nothing. A failed write is logged with `HistoryWriteFailed` and the next write opens the file again; a failed rotation (`HistoryRotateFailed`) keeps appending to the full file, as the log does.
+4. Rotation at 4 MiB (`MaxFileBytes`, a constant tests can lower through an unexported field), with a `state` line at the top of every new file.
+5. Reading: `Connections() []Connection` (newest `ConnectedAt` first) and `Transfers() []Transfer` (newest `ClosedAt` first), copies; `LastClearedAt()`, `NextClearAt()`.
+6. Clearing: `Clear(ctx) error` (§9.11 "Clearing": removes both files, writes the `state` line and the `connected` lines of the open connections; a file that cannot be removed is `HistoryClearFailed`), `ApplyPolicy(policy attempts.Policy, atStart bool) bool` and `PolicyChanged(policy attempts.Policy)` with the meaning they have in `attempts` (reuse its `Policy` type and `Period`).
+7. `Subscribe(func()) (cancel func())`; `Close() error` closes the file (`HistoryCloseFailed`).
+
+**Tests**
+
+- `TestRecordsRoundTrip`: a connection that ends, one that stays open, transfers of each direction and result; a new `Open` on the same folder reads them back equal; the open one comes back `unknown` with no `EndedAt`.
+- `TestHostileTextIsCleaned`: a client version, a path and an activity detail with `"\x1b[31m"`, `"‮"` and 300 characters are stored cleaned and cut, in memory and in the file.
+- `TestSkippedLines`: a file with a line that is not JSON, half a line at the end, a line of `"v":2`, an unknown kind, a line of 70 KiB and an `ended` line without its `connected` line: the good records are read, the log has the count 6.
+- `TestRotation` (a small limit): the file becomes `.1`, the new file starts with a `state` line, a connection that started before the rotation and ended after is read back whole.
+- `TestLimitsInMemory`: 2 001 connections and 5 001 transfers keep the newest 2 000 and 5 000.
+- `TestFileModes` (skipped on Windows): the file is `0600`.
+- `TestClear`: both files are gone, an open connection is kept and its end is paired after a new `Open`; `TestClearPolicy`: `onStart` and the periods as in the attempts tests, with the fake clock, and the times survive a new `Open`.
+- A route test for each Tag: `HistoryReadFailed` (a folder where the file should be), `HistoryWriteFailed`, `HistoryRotateFailed`, `HistoryClearFailed`, `HistoryCloseFailed` (make the operating system refuse, as the logging tests do; a Tag that cannot be provoked on one system skips there with a reason).
+
+**Finish**: rules 10–15. No proof.
+
+### Step 10.2: Recording connections
+
+**Goal**: every authenticated connection is a record in the history, with its duration, how it ended, its bytes and what it opened.
+
+**Read**: SPEC §9.3, §9.9, §9.11 (Connections). `internal/core/server/connections.go` (`serveAuthenticated`, `Disconnect`, `disconnectWhere`, `peopleChanged`, `AddActivity`), `auth.go` (`serve`, `countingConn`), `keepalive.go` (`look`), `server.go` (`Stop`).
+
+**Files**: `internal/core/server/` (`server.go`, `connections.go`, `auth.go`, `keepalive.go`, a new `history_test.go`), `internal/core/server/servertest`, `internal/app/app.go` (only to give the server the store: open it in `open`, close it in `Close`).
+
+**Tasks**
+
+1. `server.Options.History *history.Store` (required; the test harness makes one in the test's folders).
+2. `countingConn` also counts what is sent (`Write`), from the accept; the connection keeps both counters.
+3. `Conn` keeps its end reason: the first of `disconnected` (`Disconnect`, `DisconnectAll`), `personChanged` (`peopleChanged`), `keepalive` (`look`), `serverStopped` (`Stop`: mark every connection of the registry before closing), set before the close that causes it; none set means `client`.
+4. `Conn` keeps the activities it opened (`AddActivity`), each (kind, detail) once, at most 32, and the count of the others; `Activities` of the registry stays what is open now.
+5. `serveAuthenticated` calls `History.Connected` after the connection is in the registry and `History.Ended` after it is out, with the clock's times.
+
+**Tests** (with the in-process client, `servertest`):
+
+- `TestHistoryReasons`, a table: the client closes → `client`; `Disconnect` → `disconnected`; `DisconnectAll` → `disconnected`; the person disabled, renamed, removed, the key removed → `personChanged`; keepalive with the fake clock → `keepalive`; `Stop` → `serverStopped`. Each has its `EndedAt` and a duration made with the fake clock.
+- `TestHistoryActivities`: a shell, the same `exec` twice, another `exec`, a local forward: the record lists each once, in order; 40 different commands keep 32 and count 8.
+- `TestHistoryBytes`: both counters are not 0 and grow with a command that prints 1 MiB.
+- `TestRefusedAttemptsAreNotHistory`: a wrong key leaves the history empty.
+
+**Finish**: rules 10–15. No proof.
+
+### Step 10.3: Recording transfers
+
+**Goal**: every file an SFTP session reads or writes is a transfer in the history.
+
+**Read**: SPEC §9.7, §9.11 (Transfers). `internal/core/sftp/sftp.go` (`handle`, `open`, `read`, `write`, `close`, `closeAll`, `realpath`), `fs.go` (`FileSystem`, the open flags), `internal/core/session/session.go` (`Register`, `startSubsystem`).
+
+**Files**: `internal/core/sftp/sftp.go`, `transfer.go` and their tests; `internal/core/session/session.go` and its tests; `internal/app/app.go` (gives the session handler the store).
+
+**Tasks**
+
+1. `sftp.Options.Clock`; `Serve(ctx, rw, record func(Transfer))` where `sftp.Transfer{Path string; OpenedAt, ClosedAt time.Time; Downloaded, Uploaded int64; Created bool; Result string}` (`record` may be nil). The path is the opened path made absolute the way `REALPATH` makes it (without resolving links: the name the client used).
+2. A file handle counts the bytes its reads returned and its writes took, remembers whether it was opened with the create or truncate flag, and whether a read (other than `SSH_FX_EOF`) or a write failed. `CLOSE` records it with `done` or `failed`; `closeAll` with `interrupted`. A handle with nothing to record (§9.11) records nothing. Folders never record.
+3. `session.Options.History *history.Store`: the session gives `Serve` a `record` that adds the connection's id and person and calls `History.AddTransfer`.
+
+**Tests**
+
+- In `sftp`: a table over a fake writer: an upload, a download, read and write on one handle (`both`), a file created and closed empty (an upload of 0 bytes), a file opened and closed without I/O (nothing), a read past the end only (nothing), a failed write (`failed`), the session ending with a file open (`interrupted`), a relative path made absolute.
+- In `session`, through the server: `sftp` subsystem uploads and downloads with the `sshtest` SFTP client; the history has both transfers with the person and the connection's id.
+- **OpenSSH tests** (`sshtest.Require`): `sftp put`, `sftp get` and `scp` (SFTP mode) of a 300 KiB file: three transfers with the right bytes and `done`; `scp -O` is not a transfer and is an `exec` activity of the connection.
+
+**Finish**: rules 10–15. No proof.
+
+### Step 10.4: History in the application
+
+**Goal**: `internal/app` gives the UIs the history, the command that clears it, its setting and its words; the fake application has a sample history.
+
+**Read**: SPEC §10, §6, §9.11, §11.8. `internal/app/app.go`, `commands.go`, `words.go`, `messages.go`, `settings_text.go`, `flags.go`, `apptest/fake.go`, `apptest/sample.go`, `apptest/real.go`.
+
+**Files**: `internal/core/settings/schema.go` (`history.clear`); `internal/app/app.go`, `commands.go`, `events.go`, `words.go`, `messages.go`, `settings_text.go`, `flags.go` and their tests; `internal/app/apptest/*`; the `Application` interfaces of `internal/tui` and `internal/gui` only as far as the build needs (the pages come later).
+
+**Tasks**
+
+1. Setting `history.clear` (`settings.HistoryClear`, the choices of `attempts.clear`, default `never`); `app.Set` of it calls `PolicyChanged`; the minute check applies both policies; `onStart` applies at `Open`, before the server starts.
+2. `TopicHistory`; the store's `Subscribe` changes it.
+3. `History() HistorySnapshot{Connections []history.Connection, Transfers []history.Transfer, LastClearedAt, NextClearAt time.Time}`; `ClearHistory(ctx) error`.
+4. Words: `ReasonText(history.Reason) string` (the sentences of §11.8), `ResultWord(history.Result) string`, `DirectionText(history.Direction) string`, `DurationText(time.Duration) string` (`45 s`, `12 min`, `2 h 5 min`, `3 d 4 h`), `SizeText(int64) string` (`0 B`, `512 B`, `1.4 KB`, `3.2 MB`, `1.1 GB`, decimal units). The settings group "Attempts list" becomes "Attempts and history" with `history.clear` in it (its label `Clear the history`, its line "When the history of connections and transfers is emptied.").
+5. Messages for the new Tags a command can return (`HistoryClearFailed`), and `TestEveryTagHasAMessage` stays green.
+6. `Pages` gets `history` between `connections` and `settings`.
+7. `apptest`: `Fake.HistorySnapshot`, `ClearHistory` recorded in `Calls`; `Sample` has six connections (one open now, one of each other reason, one `unknown`) and eight transfers (every direction and result, one long path); `Empty` has none.
+
+**Tests**: `TestHistorySnapshot` and `TestClearHistory` over a real application (a client connects, uploads with the test SFTP client, disconnects: the snapshot has both records; a `Changed` has `TopicHistory`); `TestHistoryClearSetting` (`onStart` empties at the next `Open`, `daily` with the fake clock); the words, table-driven; `--page history`.
+
+**Finish**: rules 10–15. No proof.
+
+### Step 10.5: The TUI's History page
+
+**Goal**: `tcave` has a sixth page, History, as SPEC §11.8 and §12 say.
+
+**Read**: SPEC §11.8, §12. The box at the top of M5. `internal/tui/page_attempts.go` (a table with a filter, a search and details: copy its shape), `frame.go` (`tabs`), `model.go` (pages, keys), `keys.go`.
+
+**Files**: `internal/tui/page_history.go` and its test; `frame.go`, `model.go`, `keys.go`, `app.go`; every golden that shows the page line.
+
+**Tasks**
+
+1. The pages are Overview, People, Attempts, Connections, History, Settings: keys `1`–`6`, `Tab` goes round six. The page line: when the names do not fit, the pages that are not current show only their number (`1 2 3 4 [5 History] 6`).
+2. The page's first line: `[Connections]  Transfers` (the current tab in brackets), then `last cleared …` and `next clear …` as the Attempts page words them.
+3. Connections table: `Who`, `Address` (flexible), `Connected` (`app.Ago`), `Duration` (`app.DurationText`, `connected now`, `—`), `Ended` (`app.ReasonText`). Empty: `No connections yet.`
+4. Transfers table: `Who`, `File` (flexible, cut at the start with `…` so the name of the file shows), `Direction`, `Size`, `When` (`app.Ago`), `Result`. Empty: `No files moved yet.`
+5. Keys (add them to the key table): `t` switches the tab; `/` searches (who, address, file); `enter` shows the details of the selected row (§11.8, with the connection's transfers under a connection); `C` asks `Clear the history? Connections that are open stay.` → `ClearHistory`.
+
+**Tests**
+
+- `TestGoldenHistory`: the sample at 100×30 and 60×16 on each tab; the empty fake; the details of a connection and of a transfer; the question; a search.
+- `TestGoldenFrame` and the other page goldens are updated for the new page line: open every changed file.
+- With the fake: `C`, `y` → `ClearHistory()`; `t` switches; `6` shows Settings, `5` History.
+- With the real application: a client connects, uploads a file over SFTP and leaves; the page shows the connection with `Client left` and, on the Transfers tab, the file as an upload.
+
+**Proof** (U), with a real transfer:
+```
+scripts/tui-proof.sh docs/implemented-proof-images/10.5-history.txt --config scripts/testdata/two-people \
+  --during 'scripts/proof-ssh.sh alice alice true' --wait '0 connected' --keys 5
+```
+It must show alice's connection with its duration and `Client left`. Then the same with `--keys 5 --keys t` into `10.5-history-transfers.txt` after an upload (add a `scripts/proof-sftp.sh` beside `proof-ssh.sh` if there is no way yet to upload through the fixture's keys); it must show the file as an upload. Afterwards `pgrep -a ssh` shows nothing of yours.
+
+**Finish**: rules 10–15.
+
+### Step 10.6: The desktop's History page
+
+**Goal**: `cave` has a sixth page, History, as SPEC §11.8 says.
+
+**Read**: SPEC §11, §11.8. The box at the top of M6. `internal/gui/page_attempts.go` (the table, the search, the details, the clear dialog: copy its shape), `shell.go` (the destinations), `root.go`, `app.go`.
+
+**Files**: `internal/gui/page_history.go` and its test; `shell.go`, `root.go`, `app.go`; the goldens that show the navigation.
+
+**Tasks**
+
+1. A destination History (an icon of history or a clock from `m.Icons`; look it up) between Connections and Settings, in the rail and the bottom bar.
+2. A segmented button Connections | Transfers, a search field, the line about clearing with a link to the setting, and "Clear history" (a dialog that asks first; its error in the dialog).
+3. The two tables of §11.8 with the words of `internal/app`; a selected row shows its details beside the table (wide) or under it (narrow), with the connection's transfers under a connection.
+
+**Tests**
+
+- `TestGoldenHistory`: light-wide and dark-narrow on each tab, a selected connection, a selected transfer, the empty fake, the clear dialog. Open every PNG.
+- The navigation goldens of the other pages are updated: open every changed PNG.
+- With the fake: the clear dialog → `ClearHistory()`; the segmented button switches; the search narrows the rows.
+- With the real application: a connection and an SFTP upload appear on the page.
+
+**Proof** (D): `scripts/proof.sh docs/implemented-proof-images/10.6-history.png --config scripts/testdata/two-people --during '<the commands of step 10.5>' -- --page history`. It must show the connection and its duration.
+
+**Finish**: rules 10–15.
+
+### Step 10.7: The manual for the history
+
+**Goal**: the guide and the README say what the history keeps, where, for how long, and how to clear it.
+
+**Files**: `README.md`, `docs/GUIDE.md`, `docs/SECURITY.md` (the history file: its mode, that it holds names of files and addresses, never content).
+
+**Tasks**
+
+1. The guide: a section "History" (the two tabs, the reasons in words, what is a transfer and what is not: `rsync` and `scp -O`, the file, its limit and rotation, `history.clear`, "Clear history"); the History page in the TUI's keys.
+2. README: the history in the features.
+3. **Last step of M10**: a second commit sets `devVersion` to `0.12.0-dev`; then merge, tag `step-10.7`, publish as `v0.11.0` (rule 14).
+
+**Finish**: rules 10–15. No proof.
