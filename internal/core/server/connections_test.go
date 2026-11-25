@@ -147,6 +147,11 @@ func TestTheRegistry(t *testing.T) {
 	if conns[0].PersonName != "alice" || conns[1].PersonName != "alice" {
 		t.Errorf("after bob left: %+v", conns)
 	}
+	// The connection leaves the registry a moment before the listeners are told: wait for it.
+	deadline := time.Now().Add(waitFor)
+	for changes.Load() < 4 && time.Now().Before(deadline) {
+		time.Sleep(time.Millisecond)
+	}
 	if got := changes.Load(); got < 4 {
 		t.Errorf("listeners were told of %d changes of the connections, want at least 4", got)
 	}

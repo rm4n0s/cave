@@ -602,3 +602,14 @@ One entry per finished step of `docs/IMPLEMENTATION.md`, newest last. Format:
 
 ### The plan is finished
 Every step of `docs/IMPLEMENTATION.md` is implemented (M0 to M9). The milestones are published as `v0.1.0` to `v0.10.0`. What is left for the author: the items of `docs/MANUAL-CHECKS.md` (the tray and the notifications on a desktop, a terminal session, agent forwarding and the programs on a Windows PC, the desktop app and a terminal session on a Mac, the icon on a desktop and on Windows), publishing the files of a release (`scripts/build-release.sh` makes them and uploads nothing), and the decision on `v1.0.0`. `docs/GLUTTER-ISSUES.md` has no entry: no workaround of Glutter was needed.
+
+## Step 10.1: The history store
+- **Date**: 2026-11-25
+- **Branch**: feat/step-10.1-history
+- **Summary**: `internal/core/history`: the records of connections and transfers (SPEC §9.11), kept in memory (the newest 2 000 and 5 000) and appended as JSON lines to `history.jsonl` (mode 0600), put aside as `history.jsonl.1` past 4 MiB with a `state` line at the top of every new file; read back at start, skipping lines that cannot be; `Clear` that keeps the open connections, and `ApplyPolicy`/`PolicyChanged` with the meaning of `attempts`. Nothing calls it yet.
+- **Decisions**: lines with an unknown reason or result, or a missing time, are skipped too (SPEC §9.11 says so now). A file whose last line was cut off gets a newline before the next line, so that both read again. Besides the Tags the plan named, `HistoryOpenCancelled`, `HistoryClearCancelled`, `HistoryFileOpenFailed` (opening for an append) and `HistoryEncodeFailed` (a time JSON cannot hold) each have their own site. An unknown reason given to `Ended` is recorded as `client`. `TestTheRegistry` of `internal/core/server` (a race of the test: it read the count of changes before the listeners were told) now waits for the count; it failed once in the race run of this step.
+- **Checks**: `scripts/checks.sh` passed: gofmt, vet (Linux, macOS, Windows), golangci-lint 0 issues, race tests as a debug build, cgo-free build and tests, Windows build, error tags (none untested), the Wine run.
+- **Tests**: records round trip (an open connection comes back `unknown`), directions, edges of `Connected`/`Ended`/`AddTransfer`, hostile text cleaned in memory and in the file, the activity limit, skipped lines (6 kinds) and the count in the log, rotation with a connection across it, the limits in memory, clear (with a file put aside and an open connection), the clearing policies across reopening, nothing written after `Close`, subscriptions, the file modes, and a route test for every Tag (also as logged).
+- **Proof**: none
+- **Manual checks**: none
+- **Glutter issues**: none
