@@ -118,7 +118,7 @@ func pageFor(v *view) m.Widget {
 	case pageSettings:
 		return newSettingsPage(v)
 	case pageHistory:
-		// TODO(step 10.6): the History page.
+		return newHistoryPage(v)
 	}
 	return newHeadline(destinations[v.page].label)
 }

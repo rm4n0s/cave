@@ -75,7 +75,7 @@ func (s *rootState) InitState() {
 		hasTray:    !w.opts.NoDesktop && !s.tray.unavailable(),
 		selectPage: s.selectPage, showSettings: s.showSettings, opts: w.opts,
 	}).
-		with(app.TopicServer | app.TopicPeople | app.TopicAttempts | app.TopicConnections | app.TopicSettings)
+		with(app.TopicServer | app.TopicPeople | app.TopicAttempts | app.TopicConnections | app.TopicHistory | app.TopicSettings)
 	s.timer = s.clock.AfterFunc(tickEvery, s.tick)
 	// The tray may turn out to be missing after the first frame.
 	s.tray.subscribe(func() { binding.Post(s.trayGone) })

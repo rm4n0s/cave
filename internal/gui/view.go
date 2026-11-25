@@ -23,6 +23,7 @@ type view struct {
 	people      []people.Person
 	attempts    app.AttemptsSnapshot
 	connections []server.Connection
+	history     app.HistorySnapshot
 	settings    settings.Snapshot
 	// window acts on the window: show, hide, and the question before quitting.
 	window *windowControl
@@ -57,6 +58,9 @@ func (v *view) with(topics app.Topics) *view {
 	}
 	if topics.Has(app.TopicConnections) {
 		c.connections = v.app.Connections()
+	}
+	if topics.Has(app.TopicHistory) {
+		c.history = v.app.History()
 	}
 	if topics.Has(app.TopicSettings) {
 		c.settings = v.app.Settings()

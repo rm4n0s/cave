@@ -657,3 +657,14 @@ Every step of `docs/IMPLEMENTATION.md` is implemented (M0 to M9). The milestones
 - **Proof**: [10.5-history.txt](implemented-proof-images/10.5-history.txt) (two real connections of alice, `ssh` and `sftp`, with their duration and `Client left`), [10.5-history-transfers.txt](implemented-proof-images/10.5-history-transfers.txt) (two uploads and a download of the real `sftp`, in the proof's own home)
 - **Manual checks**: none
 - **Glutter issues**: none
+
+## Step 10.6: The desktop's History page
+- **Date**: 2026-11-25
+- **Branch**: feat/step-10.6-desktop-history
+- **Summary**: The History page of `cave` (SPEC §11.8): a segmented button Connections | Transfers, a search over who, address and file, "Clear history" (a dialog that asks first), the line about clearing with "Change…" to the setting, the two tables with the words of `internal/app` (a path cut at its start), and the details of the selected record beside the table on a wide window and under it on a narrow one (a connection with the files it moved; a transfer with its whole path). The view reads `History()` on `TopicHistory`.
+- **Decisions**: the tables are in the order of the history, newest first, and are not sorted by their columns (the history is a log; the search finds a record). At most 500 rows are built, as on the Attempts page. The proof's server must run at launch, and the fixture `two-people` leaves it off since the setting's default changed: the proof uses a copy of it in a temporary folder with `server.startOnLaunch` on.
+- **Checks**: `scripts/checks.sh` passed: gofmt, vet (Linux, macOS, Windows), golangci-lint 0 issues, race tests as a debug build, cgo-free build and tests, Windows build, error tags (none untested), the Wine run.
+- **Tests**: `TestGoldenHistory` (8 PNGs: each tab light-wide and dark-narrow, a selected connection, a selected transfer scrolled to its details, the empty fake, the clear dialog; every one looked at); the clear (yes → `ClearHistory()`, cancel, an empty history asks nothing, "Change…" goes to Settings); the tabs and the search; the page follows a `Changed` of the history; the real application (a connection with an upload: `Client left`, and the upload on the Transfers tab).
+- **Proof**: ![10.6-history](implemented-proof-images/10.6-history.png) — two real connections of alice (`ssh`, `sftp`) with their duration and `Client left`; `scripts/proof.sh docs/implemented-proof-images/10.6-history.png --config <a copy of scripts/testdata/two-people with server.startOnLaunch on and the light theme> --during '<proof-ssh.sh and proof-sftp.sh as in step 10.5>' --after 6 -- --page history`
+- **Manual checks**: none
+- **Glutter issues**: none
