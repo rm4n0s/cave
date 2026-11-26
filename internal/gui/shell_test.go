@@ -13,6 +13,7 @@ import (
 	"github.com/rm4n0s/cave/internal/app/apptest"
 	"github.com/rm4n0s/cave/internal/core/server"
 	"github.com/rm4n0s/cave/internal/gui/testutil"
+	"github.com/rm4n0s/errors"
 )
 
 func TestGoldenShell(t *testing.T) {
@@ -161,5 +162,24 @@ func TestTheRealRunnerGivesTheErrorBackOnTheUIThread(t *testing.T) {
 	fn()
 	if !called || got != want {
 		t.Errorf("done called %v with %v, want %v", called, got, want)
+	}
+}
+
+func TestTheRealRunnerKeepsTheRouteFromWhereTheCommandWasRun(t *testing.T) {
+	// The command runs on a goroutine of its own; the route of the error the application gives
+	// back starts at the runner all the same, and goes through the command down to the Tag.
+	r := apptest.Open(t, nil)
+	posted := make(chan func(), 1)
+	run := newRunner(context.Background(), func(fn func()) { posted <- fn })
+	var got error
+	run(func(ctx context.Context) error { return r.App.SetPersonEnabled(ctx, "nobody", false) }, func(err error) { got = err })
+	(<-posted)()
+	appErr, ok := errors.FromError(got)
+	if !ok {
+		t.Fatalf("expected *errors.Error, got %T: %v", got, got)
+	}
+	want := "newRunner.func1->newRunner.func1.1->TestTheRealRunnerKeepsTheRouteFromWhereTheCommandWasRun.func2->App.SetPersonEnabled->Store.SetEnabled->findPerson.PersonNotFound"
+	if !appErr.HasRoute(want) {
+		t.Errorf("unexpected failure path: %s", appErr.Route())
 	}
 }

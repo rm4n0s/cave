@@ -10,6 +10,7 @@ import (
 	"github.com/rm4n0s/cave/internal/core/people"
 	"github.com/rm4n0s/cave/internal/core/server"
 	"github.com/rm4n0s/cave/internal/core/settings"
+	"github.com/rm4n0s/errors"
 )
 
 // Options are what Run needs besides the application.
@@ -176,9 +177,35 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m = m.pastePrompt(msg.Content)
 		}
 	case tea.KeyPressMsg:
-		return m.key(msg)
+		next, cmd := m.key(msg)
+		if cmd == nil {
+			return next, nil
+		}
+		// Bubble Tea runs the command on a goroutine of its own. It is handed over through
+		// errors.Async here, so that the route of an error the command gives back starts at
+		// Update, as if the command had been called here.
+		var result tea.Msg
+		run := errors.Async(func() error {
+			result = cmd()
+			return commandErr(result)
+		})
+		return next, func() tea.Msg {
+			_ = run() // the error is the one result carries, which Async gave its route
+			return result
+		}
 	}
 	return m, nil
+}
+
+// commandErr is the error that the message of a command carries, or nil.
+func commandErr(msg tea.Msg) error {
+	switch msg := msg.(type) {
+	case doneMsg:
+		return msg.err
+	case promptDone:
+		return msg.err
+	}
+	return nil
 }
 
 // doneSentence is the sentence that says why a prompt's command failed, or "" when it did not.

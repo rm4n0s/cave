@@ -90,6 +90,8 @@ cmd/tcave ► internal/tui ┘
 
 The server accepts each connection on its own goroutine; sessions, SFTP and forwards have theirs. The stores (`settings`, `people`, `attempts`) are safe for concurrent use. `internal/app` calls its subscribers from its own goroutines; a UI hands the event to its UI thread (`Post`/`SetState` in the desktop app, `Program.Send` in the TUI) and reads a fresh snapshot there.
 
+A command of the application that a UI runs away from its UI thread (the desktop's runner, the `tea.Cmd` that the TUI's `Update` returns) is handed to its goroutine through `errors.Async` of `github.com/rm4n0s/errors` (v0.3.0), called on the UI thread: the route of an error that the command gives back then starts where the command was run (`Model.Update->Model.Update.func1->Model.togglePerson.func1->App.SetPersonEnabled->Store.SetEnabled->findPerson.PersonNotFound`), as if it had been called there. A goroutine whose errors never leave it (the server's loops, the copies of a session, the timers that log) hands nothing over. No goroutine turns a panic into an error (no `errors.AsyncRecover`), and no place collects the errors of several goroutines (no `errors.Join`).
+
 ## 5. Storage
 
 ### 5.1 Folders
