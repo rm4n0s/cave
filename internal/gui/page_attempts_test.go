@@ -339,7 +339,12 @@ func TestAttemptsWithTheRealApplication(t *testing.T) {
 	r.Connect("alice", key)
 	r.Refuse("nobody", key)
 	r.Refuse("nobody", key)
-	r.Eventually("the application shows both entries", func() bool { return len(r.App.Attempts().Entries) == 2 })
+	// The second refusal goes into the entry of the first, so two entries are not enough: the
+	// three attempts must all be counted.
+	r.Eventually("the application does not show the three attempts in two entries", func() bool {
+		entries := r.App.Attempts().Entries
+		return len(entries) == 2 && entries[0].Count+entries[1].Count == 3
+	})
 	tester := pumpOptions(t, r.App, testutil.Wide, Options{Page: "attempts", Clock: r.Clock}, syncRunner)
 	counts := map[string]int64{}
 	for _, e := range theAttemptsState(tester).visible(theAttemptsState(tester).Widget().v) {
