@@ -3,7 +3,7 @@ module github.com/rm4n0s/cave
 go 1.27
 
 require (
-	github.com/rm4n0s/errors v0.2.0
+	github.com/rm4n0s/errors v0.3.1
 	github.com/evil/dependency v1.0.0
 	github.com/quiet/indirect v1.0.0 // indirect
 )

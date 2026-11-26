@@ -2,6 +2,8 @@ module github.com/rm4n0s/cave
 
 go 1.27
 
+toolchain go1.27.4
+
 require (
 	charm.land/bubbletea/v2 v2.1.2
 	charm.land/lipgloss/v2 v2.1.1
