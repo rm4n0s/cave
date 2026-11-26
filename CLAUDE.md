@@ -57,7 +57,7 @@ Before reporting a task as finished, run `gofmt` (on `cmd` and `internal`), `go 
 - Pass `context.Context` as the first parameter of anything that does I/O (files, processes, network). Name it `ctx`. Name a Glutter `BuildContext` `bc`
 - Tests are table-driven
 - No global mutable state and no singletons. Package-level read-only values are fine and are never reassigned
-- Prefer the standard library. Allowed dependencies: `github.com/rm4n0s/glutter` (v1.17.11 or newer, only under `internal/gui` and `cmd/cave`), `github.com/rm4n0s/errors`, `golang.org/x/crypto` (`ssh`, `ssh/agent`), `golang.org/x/sys`, `charm.land/bubbletea/v2` and `charm.land/lipgloss/v2` (only under `internal/tui` and `cmd/tcave`), and what these bring in. A step that first imports one of them adds it with `go get <module>@<version>`. Ask before adding any other
+- Prefer the standard library. Allowed dependencies: `github.com/rm4n0s/glutter` (v1.17.11 or newer, only under `internal/gui` and `cmd/cave`), `github.com/rm4n0s/errors` (v0.3.0 or newer: `Async`, `Join`, `All`), `golang.org/x/crypto` (`ssh`, `ssh/agent`), `golang.org/x/sys`, `charm.land/bubbletea/v2` and `charm.land/lipgloss/v2` (only under `internal/tui` and `cmd/tcave`), and what these bring in. A step that first imports one of them adds it with `go get <module>@<version>`. Ask before adding any other
 - **No cgo**: never write `import "C"`. If a C library is ever needed, ask first
 - Only Glutter's UI thread touches widgets and render objects, and only Bubble Tea's `Update` touches the TUI's model. Other goroutines (the server, sessions, timers) hand work over through `SetState` or the binding's `Post` (desktop) and through a `tea.Msg` (TUI)
 - Long-running work never blocks a UI thread, and takes a `ctx` so it can be cancelled
@@ -69,7 +69,7 @@ Before reporting a task as finished, run `gofmt` (on `cmd` and `internal`), `go 
 - Read Glutter's source in the Go module cache when its behavior is unclear (`go list -m -f '{{.Dir}}' github.com/rm4n0s/glutter`); its `docs/GUIDE.md` and `docs/SPEC.md` describe its use and design
 
 ## Error handling
-Use `github.com/rm4n0s/errors` for all errors. Never use `fmt.Errorf`, and never import the standard library `errors` package: this package re-exports `errors.Is`, `errors.As` and `errors.Unwrap`, so a single import covers everything. Read `AI_GUIDE.md` of github.com/rm4n0s/errors (in the Go module cache: `go list -m -f '{{.Dir}}' github.com/rm4n0s/errors`) before writing error code.
+Use `github.com/rm4n0s/errors` for all errors. Never use `fmt.Errorf`, and never import the standard library `errors` package: this package re-exports `errors.Is`, `errors.As`, `errors.Unwrap` and `errors.Join`, so a single import covers everything. Read `AI_GUIDE.md` of github.com/rm4n0s/errors (in the Go module cache: `go list -m -f '{{.Dir}}' github.com/rm4n0s/errors`) before writing error code.
 
 **Creating errors**
 - New failure with a fixed message: `errors.New("Tag", "message", "key", value, ...)` (all metadata in this one call, never `New(...).SetMetadata(...)`)
@@ -87,9 +87,17 @@ Use `github.com/rm4n0s/errors` for all errors. Never use `fmt.Errorf`, and never
 - Functions return the plain `error` interface, never `*errors.Error` (avoids the non-nil-interface-holding-nil-pointer bug)
 - `errors.FromError(err)` is a plain type assertion. It fails if something else wrapped the error, so don't wrap these errors with anything
 
+**Goroutines**
+- A goroutine has its own stack, so an error created on it has a route without the function that started it. Work whose error comes back to another goroutine (returned, logged or shown there: a result channel, a callback through `Post`, a `tea.Cmd` and its message, a WaitGroup) is handed over through `errors.Async`, called on the side that hands the work off and run on the goroutine: `run := errors.Async(func() error { return work(ctx) }); go func() { done(run()) }()`. The route then reads as if the work had been called where `Async` was called (`Model.Update->Model.Update.func1->Model.togglePerson.func1->App.SetPersonEnabled->...`), and no `go` statement or runtime frame appears in it. Calling `Async` inside the goroutine is wrong: the parent is lost. With a worker pool or a queue, call it where the job is submitted. Only an error the function returns gets the route; one it sends on a channel does not
+- Where Cave does it: the desktop's runner of commands (`internal/gui/async.go`) and the commands that the TUI's `Update` returns (`internal/tui/model.go`). A goroutine whose errors never leave it (the server's loops, the copies of a session, a timer that logs) needs nothing
+- `errors.AsyncRecover` is `Async` that turns a panic of the work into an `*Error` with the Tag `errors.TagPanic`. It changes a crash into an error: use it only where the spec asks for that, never just because it exists
+- Several goroutines that can each fail: collect what they return (one slot each) and combine it with `errors.Join`; the caller reads the errors back with `errors.All(err)`, which returns every `*errors.Error` in the tree, because `FromError` does not look inside a joined error. Where the spec says to keep only the first failure (`App.Close`), keep only the first
+- An `*errors.Error` is not safe for concurrent use: never call `SetMetadata`, `RemoveMetadata` or `SetMessage` on an error that another goroutine can still reach, or on a sentinel
+
 **Inspecting errors**
 - `appErr, ok := errors.FromError(err)`, then use `appErr.Tag`, `appErr.Metadata`, `appErr.Message`
 - Use `errors.Is` / `errors.As` / `errors.Unwrap` for the underlying cause stored in `OriginalErr`
+- A joined error (`errors.Join`) is read with `errors.All(err)`, which returns every `*errors.Error` inside it (and inside anything wrapped with `%w`), outermost first
 
 **Testing errors**
 - Every new failure case gets its own unique Tag and a test that asserts the route, not just that an error occurred:
@@ -102,7 +110,8 @@ Use `github.com/rm4n0s/errors` for all errors. Never use `fmt.Errorf`, and never
       t.Errorf("unexpected failure path: %s", appErr.Route())
   }
   ```
-- A route lists the call chain from outermost to innermost (`Type.Method` or `Func`, joined by `->`) and ends with the Tag. `HasRoute` matches by substring
+- A route lists the call chain from outermost to innermost (`Type.Method` or `Func`, joined by `->`) and ends with the Tag. `HasRoute` matches by substring. Frames of the Go runtime (`goexit`, `main`, `gopanic`) never appear in a route (`StackFrames(true)` and `StackTrace()` still show them)
+- Work handed to a goroutine through `errors.Async` gets a test that runs it on another goroutine and asserts the whole route across the boundary, from the function that called `Async` down to the Tag
 - Log errors with `slog`, passing the error as an attribute (`l.Error("failed", "err", err)`): `*errors.Error` is a `slog.LogValuer`, so the log gets the Tag, Route, Metadata and stack frames, and the logged object can be replayed in a test via `errors.ErrorJson` and `errors.FromJson`. Do not call `ToJson` or `json.Marshal` on an error yourself
 
 ## Security
