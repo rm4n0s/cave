@@ -9,7 +9,7 @@ require (
 	charm.land/lipgloss/v2 v2.1.1
 	github.com/charmbracelet/x/ansi v0.11.9
 	github.com/rm4n0s/errors v0.3.1
-	github.com/rm4n0s/glutter v1.17.14
+	github.com/rm4n0s/glutter v1.17.15
 	golang.org/x/crypto v0.59.0
 	golang.org/x/sys v0.50.0
 )
