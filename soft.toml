@@ -1,0 +1,21 @@
+# Cave's desktop applications, for Soft (github.com/rm4n0s/soft): when Soft installs Cave, they
+# get menu entries with Cave's logo.
+
+[[app]]
+cmd        = "./cmd/cave"
+name       = "Cave"
+comment    = "An SSH server you start, watch and stop"
+categories = ["Network"]
+keywords   = ["ssh", "server", "sshd", "remote"]
+id         = "io.github.rm4n0s.cave"
+wm-class   = "io.github.rm4n0s.cave"
+icons      = ["packaging/icons/cave-*.png", "packaging/logo.svg"]
+
+[[app]]
+cmd        = "./cmd/tcave"
+name       = "Cave (terminal)"
+comment    = "An SSH server you start, watch and stop, in a terminal"
+categories = ["Network", "ConsoleOnly"]
+keywords   = ["ssh", "server", "sshd", "remote"]
+terminal   = true
+icons      = ["packaging/icons/cave-*.png", "packaging/logo.svg"]
